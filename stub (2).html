@@ -1,0 +1,2549 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>STUB — Diário de Filmes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg-base:#07070A;
+    --text:#F6F4F1;
+    --text-dim:rgba(246,244,241,0.56);
+    --text-faint:rgba(246,244,241,0.36);
+    --accent:#E8A33D;
+    --accent-2:#E0625F;
+
+    --glass:rgba(255,255,255,0.07);
+    --glass-strong:rgba(255,255,255,0.115);
+    --glass-border:rgba(255,255,255,0.20);
+    --glass-border-soft:rgba(255,255,255,0.10);
+    --glass-highlight:rgba(255,255,255,0.55);
+    --glass-shadow:rgba(0,0,0,0.35);
+
+    --r-lg:28px;
+    --r-md:20px;
+    --r-sm:14px;
+    --r-pill:999px;
+
+    --font-display:'Plus Jakarta Sans', sans-serif;
+    --font-body:'Plus Jakarta Sans', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg-base);
+    color:var(--text);
+    font-family:var(--font-body);
+    min-height:100vh;
+    position:relative;
+    overflow-x:hidden;
+  }
+
+  /* ---------- liquid light field (backdrop the glass refracts) ---------- */
+  .orb-field{
+    position:fixed; inset:0; z-index:0;
+    overflow:hidden;
+    pointer-events:none;
+  }
+  .orb{
+    position:absolute;
+    border-radius:50%;
+    filter:blur(70px);
+    opacity:0.55;
+    will-change:transform;
+  }
+  .orb-1{ width:340px; height:340px; top:-90px; left:-80px; background:var(--accent); animation:drift1 26s ease-in-out infinite alternate; }
+  .orb-2{ width:300px; height:300px; bottom:60px; right:-100px; background:var(--accent-2); animation:drift2 22s ease-in-out infinite alternate; }
+  .orb-3{ width:260px; height:260px; top:40%; left:20%; background:#5B57D6; opacity:0.35; animation:drift3 30s ease-in-out infinite alternate; }
+
+  @keyframes drift1{ from{ transform:translate(0,0) scale(1);} to{ transform:translate(40px,60px) scale(1.15);} }
+  @keyframes drift2{ from{ transform:translate(0,0) scale(1);} to{ transform:translate(-50px,-30px) scale(1.1);} }
+  @keyframes drift3{ from{ transform:translate(0,0) scale(1);} to{ transform:translate(-30px,50px) scale(0.9);} }
+  @media (prefers-reduced-motion: reduce){
+    .orb{ animation:none !important; }
+  }
+
+  /* fine grain to keep the glass from looking too clean/plastic */
+  body::after{
+    content:"";
+    position:fixed; inset:0;
+    pointer-events:none;
+    z-index:998;
+    opacity:0.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay;
+  }
+
+  #app{
+    max-width:520px;
+    margin:0 auto;
+    min-height:100vh;
+    display:none;
+    flex-direction:column;
+    position:relative;
+    z-index:1;
+  }
+  #app.show{ display:flex; }
+
+  /* ---------- generic glass surface ---------- */
+  .glass{
+    background:var(--glass);
+    -webkit-backdrop-filter:blur(24px) saturate(160%);
+    backdrop-filter:blur(24px) saturate(160%);
+    border:1px solid var(--glass-border-soft);
+    box-shadow:0 1px 0 0 var(--glass-highlight) inset, 0 10px 30px -12px var(--glass-shadow);
+  }
+
+  /* ---------- auth screen ---------- */
+  #authScreen{
+    position:relative; z-index:1;
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+  }
+  #authScreen.hide{ display:none; }
+  .auth-card{
+    width:100%; max-width:360px;
+    padding:30px 26px 26px;
+    border-radius:var(--r-lg);
+    text-align:center;
+  }
+  .auth-card .mark{
+    font-family:var(--font-display); font-weight:800; font-size:24px; margin-bottom:2px;
+  }
+  .auth-card .mark em{ color:var(--accent); font-style:normal; }
+  .auth-card .tagline{
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:24px;
+  }
+  .auth-heading{
+    font-family:var(--font-display); font-weight:700; font-size:16px; margin-bottom:14px;
+  }
+  .auth-error{
+    background:rgba(224,98,95,0.12); border:1px solid rgba(224,98,95,0.35);
+    color:var(--accent-2); font-size:12px; padding:9px 12px; border-radius:var(--r-sm);
+    margin-bottom:14px;
+  }
+  .auth-input{
+    width:100%;
+    background:var(--glass);
+    border:1px solid var(--glass-border-soft);
+    border-radius:var(--r-sm);
+    color:var(--text);
+    font-family:var(--font-body);
+    font-size:14px;
+    padding:12px 14px;
+    margin-bottom:10px;
+    outline:none;
+    text-align:left;
+  }
+  .auth-input::placeholder{ color:var(--text-faint); }
+  .profile-item{
+    width:100%;
+    display:flex; align-items:center; gap:12px;
+    background:var(--glass);
+    border:1px solid var(--glass-border-soft);
+    border-radius:var(--r-md);
+    padding:10px 14px;
+    margin-bottom:8px;
+    color:var(--text);
+    font-family:var(--font-body); font-weight:600; font-size:14px;
+    cursor:pointer; text-align:left;
+  }
+  .avatar{
+    width:32px; height:32px; border-radius:50%; flex-shrink:0;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:800; font-size:13px; color:#1A1200;
+  }
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    position:sticky; top:0; z-index:20;
+    margin:14px 14px 16px;
+    padding:10px 12px 10px 18px;
+    border-radius:var(--r-md);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .topbar .mark{
+    font-family:var(--font-display);
+    font-weight:800;
+    font-size:20px;
+    letter-spacing:0.01em;
+    color:var(--text);
+  }
+  .topbar .mark em{
+    color:var(--accent);
+    font-style:normal;
+    font-weight:800;
+  }
+  .topbar .tagline{
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin-top:2px;
+  }
+  .topbar .avatar{ cursor:pointer; border:1px solid var(--glass-border-soft); }
+  .topbar-actions{ display:flex; align-items:center; gap:8px; }
+  .icon-btn{
+    width:32px; height:32px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--glass); border:1px solid var(--glass-border-soft);
+    color:var(--text-dim); cursor:pointer;
+  }
+  .icon-btn svg{ width:15px; height:15px; }
+  .icon-btn.synced{ color:var(--accent); }
+
+  /* ---------- config banner ---------- */
+  .config-banner{
+    margin:0 14px 14px;
+    padding:14px 16px;
+    border-radius:var(--r-md);
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    line-height:1.6;
+    color:var(--text-dim);
+    display:none;
+    border-color:rgba(232,163,61,0.35);
+  }
+  .config-banner.show{ display:block; }
+  .config-banner strong{ color:var(--accent); }
+
+  /* ---------- views ---------- */
+  main{ flex:1; padding-bottom:120px; }
+  .view{ display:none; padding:0 14px; }
+  .view.active{ display:block; animation:fade .3s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  .section-label{
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin:4px 4px 14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .section-label::after{
+    content:"";
+    flex:1; height:1px;
+    background:var(--glass-border-soft);
+  }
+
+  /* ---------- empty state ---------- */
+  .empty{
+    padding:52px 14px;
+    text-align:center;
+    color:var(--text-dim);
+    border-radius:var(--r-md);
+  }
+  .empty .glyph{
+    font-family:var(--font-display);
+    font-weight:800;
+    font-size:30px;
+    color:var(--accent);
+    margin-bottom:10px;
+    opacity:0.85;
+  }
+  .empty p{ font-size:13.5px; line-height:1.6; max-width:280px; margin:0 auto; }
+
+  /* ---------- search ---------- */
+  .search-box{
+    display:flex; align-items:center; gap:10px;
+    padding:14px 18px;
+    margin:0 4px 18px;
+    border-radius:var(--r-pill);
+  }
+  .search-box svg{ flex-shrink:0; opacity:0.6; }
+  .search-box input{
+    flex:1;
+    background:none; border:none; outline:none;
+    color:var(--text);
+    font-family:var(--font-body);
+    font-weight:500;
+    font-size:15px;
+  }
+  .search-box input::placeholder{ color:var(--text-faint); }
+
+  .poster-grid{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:10px;
+    padding:0 4px;
+  }
+  .poster-card{
+    position:relative;
+    aspect-ratio:2/3;
+    overflow:hidden;
+    cursor:pointer;
+    border-radius:var(--r-sm);
+  }
+  .poster-card img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .poster-card .no-img{
+    display:flex; align-items:center; justify-content:center;
+    height:100%; padding:8px; text-align:center;
+    font-family:var(--font-display); font-weight:600; font-size:12px;
+    color:var(--text-dim);
+  }
+  .poster-card .badge{
+    position:absolute; top:6px; right:6px;
+    width:9px; height:9px; border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 0 2px rgba(0,0,0,0.45), 0 0 8px var(--accent);
+  }
+  .poster-card .fav-btn{
+    position:absolute; top:5px; left:5px; z-index:2;
+    width:24px; height:24px;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(10,10,12,0.5);
+    -webkit-backdrop-filter:blur(8px);
+    backdrop-filter:blur(8px);
+    border:1px solid var(--glass-border-soft);
+    border-radius:50%;
+    cursor:pointer;
+  }
+  .poster-card .fav-btn svg{ width:12px; height:12px; }
+  .poster-card .title-cap{
+    position:absolute; left:0; right:0; bottom:0;
+    padding:14px 6px 5px;
+    background:linear-gradient(transparent, rgba(0,0,0,0.75));
+    font-family:var(--font-body); font-weight:600; font-size:9.5px;
+    line-height:1.25; color:var(--text);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+
+  /* ---------- trending rail ---------- */
+  .trending-rail{
+    display:flex; gap:10px;
+    overflow-x:auto;
+    padding:0 4px 4px;
+    margin-bottom:24px;
+    scrollbar-width:none;
+  }
+  .trending-rail::-webkit-scrollbar{ display:none; }
+  .trending-rail .poster-card{ width:104px; flex-shrink:0; }
+
+  /* ---------- diary stub cards (liquid seam signature) ---------- */
+  .stub{
+    display:flex;
+    margin:0 4px 12px;
+    cursor:pointer;
+    position:relative;
+    border-radius:var(--r-md);
+    overflow:hidden;
+  }
+  .stub .poster{ width:68px; flex-shrink:0; }
+  .stub .poster img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .stub .poster .no-img{
+    width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:600; font-size:10px;
+    color:var(--text-dim); text-align:center; padding:4px;
+  }
+  .stub .seam{
+    width:14px; flex-shrink:0;
+    position:relative;
+    background:
+      radial-gradient(circle 3px, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.05) 70%, transparent 100%) center / 14px 18px repeat-y;
+    opacity:0.8;
+  }
+  .stub .info{
+    flex:1;
+    padding:12px 14px;
+    min-width:0;
+    display:flex; flex-direction:column; justify-content:center;
+    gap:4px;
+  }
+  .stub .info .title{
+    font-family:var(--font-display);
+    font-size:15.5px;
+    font-weight:700;
+    line-height:1.25;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .stub .info .meta{
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    color:var(--text-dim);
+    letter-spacing:0.02em;
+  }
+  .stub .stars{ display:flex; gap:2px; margin-top:3px; }
+  .stub .stars svg{ width:12px; height:12px; }
+  .stub .remove{
+    position:absolute; top:8px; right:10px;
+    width:22px; height:22px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim);
+    background:rgba(0,0,0,0.25);
+    border:1px solid var(--glass-border-soft);
+    border-radius:50%;
+    font-size:14px; line-height:1;
+    cursor:pointer;
+  }
+  .stub .remove:hover{ color:var(--accent-2); }
+
+  /* ---------- watchlist quick action ---------- */
+  .wl-card{ position:relative; }
+  .wl-card .quick{
+    position:absolute; bottom:6px; left:6px; right:6px;
+    background:rgba(10,10,12,0.55);
+    -webkit-backdrop-filter:blur(10px);
+    backdrop-filter:blur(10px);
+    border:1px solid var(--glass-border-soft);
+    border-radius:var(--r-pill);
+    font-family:var(--font-mono);
+    font-size:9px;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    text-align:center;
+    padding:5px 2px;
+    color:var(--accent);
+  }
+
+  /* ---------- tabbar (floating glass pill) ---------- */
+  .tabbar{
+    position:fixed; bottom:0; left:0; right:0; z-index:30;
+    display:flex; justify-content:center;
+    padding-bottom:max(18px, env(safe-area-inset-bottom));
+    pointer-events:none;
+  }
+  .tabbar .pill{
+    pointer-events:auto;
+    display:flex; gap:4px;
+    padding:6px;
+    border-radius:var(--r-pill);
+    max-width:calc(520px - 28px);
+    width:calc(100% - 28px);
+  }
+  .tabbar button{
+    flex:1;
+    background:none; border:none;
+    padding:10px 6px;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    color:var(--text-dim);
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:10px;
+    letter-spacing:0.01em;
+    border-radius:var(--r-pill);
+    cursor:pointer;
+    transition:background .25s ease, color .25s ease;
+  }
+  .tabbar button svg{ width:19px; height:19px; transition:stroke .25s ease; }
+  .tabbar button.active{
+    color:var(--text);
+    background:rgba(255,255,255,0.14);
+    box-shadow:0 1px 0 0 var(--glass-highlight) inset;
+  }
+  .tabbar button.active svg{ stroke:var(--accent); }
+
+  /* ---------- modal (glass sheet) ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; z-index:50;
+    background:rgba(4,4,6,0.55);
+    -webkit-backdrop-filter:blur(6px);
+    backdrop-filter:blur(6px);
+    display:none;
+    align-items:flex-end;
+    justify-content:center;
+  }
+  .modal-overlay.show{ display:flex; animation:fade .25s ease; }
+  .modal{
+    width:100%; max-width:520px;
+    max-height:88vh;
+    overflow-y:auto;
+    background:rgba(22,20,26,0.72);
+    -webkit-backdrop-filter:blur(30px) saturate(160%);
+    backdrop-filter:blur(30px) saturate(160%);
+    border:1px solid var(--glass-border-soft);
+    border-bottom:none;
+    border-radius:var(--r-lg) var(--r-lg) 0 0;
+    box-shadow:0 1px 0 0 var(--glass-highlight) inset, 0 -20px 50px -20px rgba(0,0,0,0.5);
+    padding:0 0 30px;
+  }
+  .modal .handle{
+    width:36px; height:4px;
+    background:var(--glass-border);
+    border-radius:var(--r-pill);
+    margin:10px auto 4px;
+  }
+  .modal .hero{ position:relative; display:flex; padding:16px 20px 18px; gap:14px; }
+  .modal .hero img{
+    width:96px; aspect-ratio:2/3; object-fit:cover;
+    border-radius:var(--r-sm);
+    border:1px solid var(--glass-border-soft);
+    flex-shrink:0;
+  }
+  .modal .hero .no-img{
+    width:96px; aspect-ratio:2/3; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--glass);
+    border-radius:var(--r-sm);
+    font-family:var(--font-display); font-weight:600; font-size:11px;
+    color:var(--text-dim); text-align:center; padding:6px;
+  }
+  .modal .hero .h-info{ min-width:0; padding-top:2px; }
+  .modal .hero .h-title{
+    font-family:var(--font-display); font-weight:800; font-size:19px;
+    line-height:1.2; margin-bottom:6px;
+  }
+  .modal .hero .h-meta{
+    font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim);
+    line-height:1.8;
+  }
+  .modal .close{
+    position:absolute; top:16px; right:18px;
+    width:30px; height:30px;
+    border:1px solid var(--glass-border-soft);
+    background:var(--glass);
+    border-radius:50%;
+    color:var(--text-dim);
+    font-size:16px; cursor:pointer;
+  }
+  .modal .overview{
+    margin:0 20px 4px;
+    padding:16px 18px;
+    border-radius:var(--r-md);
+    font-size:13.5px; line-height:1.7;
+    color:var(--text);
+  }
+  .modal .block{ padding:18px 20px 4px; }
+  .modal .block-label{
+    font-family:var(--font-mono); font-size:10px; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--text-dim); margin-bottom:10px;
+  }
+  .rate-row{ display:flex; gap:8px; margin-bottom:16px; }
+  .rate-row button{ background:none; border:none; padding:2px; cursor:pointer; }
+  .rate-row svg{ width:26px; height:26px; }
+  .date-row{ display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .date-row input[type="date"]{
+    background:var(--glass);
+    border:1px solid var(--glass-border-soft);
+    border-radius:var(--r-sm);
+    color:var(--text);
+    font-family:var(--font-mono);
+    font-size:13px;
+    padding:9px 12px;
+    flex:1;
+  }
+  .btn-row{ display:flex; gap:10px; margin-bottom:10px; }
+  .btn{
+    flex:1;
+    padding:13px;
+    font-family:var(--font-body);
+    font-weight:700;
+    font-size:12.5px;
+    border-radius:var(--r-pill);
+    border:1px solid var(--glass-border-soft);
+    background:var(--glass);
+    color:var(--text);
+    cursor:pointer;
+    text-align:center;
+    text-decoration:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .btn.primary{
+    background:var(--accent); border-color:var(--accent);
+    color:#1A1200; box-shadow:0 6px 18px -6px rgba(232,163,61,0.55);
+  }
+  .btn.ghost{ color:var(--text-dim); background:transparent; }
+  .btn.danger{ border-color:rgba(224,98,95,0.5); color:var(--accent-2); background:rgba(224,98,95,0.08); }
+
+  .star-icon{ stroke:var(--text-dim); fill:none; stroke-width:1.6; }
+  .star-icon.filled{ fill:var(--accent); stroke:var(--accent); }
+
+  .heart-icon{ stroke:var(--text-dim); fill:none; stroke-width:1.8; }
+  .heart-icon.filled{ fill:var(--accent-2); stroke:var(--accent-2); }
+  .fav-toggle-row{ display:flex; align-items:center; gap:8px; margin-top:2px; }
+  .fav-toggle-row button{
+    background:none; border:none; padding:2px; cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+  }
+  .fav-toggle-row .heart-icon{ width:19px; height:19px; }
+  .fav-toggle-row .fav-label{
+    font-family:var(--font-mono); font-size:10px; color:var(--text-dim); letter-spacing:0.03em;
+  }
+
+  /* ---------- comment ---------- */
+  .stub .comment{
+    font-size:11.5px; color:var(--text-faint); font-style:italic;
+    margin-top:3px; line-height:1.4;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  textarea.comment-input{
+    width:100%;
+    background:var(--glass);
+    border:1px solid var(--glass-border-soft);
+    border-radius:var(--r-sm);
+    color:var(--text);
+    font-family:var(--font-body);
+    font-size:13px;
+    line-height:1.5;
+    padding:11px 12px;
+    resize:vertical;
+    min-height:64px;
+    margin-bottom:16px;
+  }
+  textarea.comment-input::placeholder{ color:var(--text-faint); }
+
+  /* ---------- ficha técnica / elenco ---------- */
+  .cast-rail{ display:flex; gap:14px; overflow-x:auto; padding:2px 4px 8px; scrollbar-width:none; }
+  .cast-rail::-webkit-scrollbar{ display:none; }
+  .cast-card{ width:72px; flex-shrink:0; text-align:center; }
+  .cast-card img, .cast-card .no-photo{
+    width:72px; height:72px; border-radius:50%; object-fit:cover;
+    border:1px solid var(--glass-border-soft); display:block; margin:0 auto;
+  }
+  .cast-card .no-photo{
+    display:flex; align-items:center; justify-content:center;
+    background:var(--glass); font-family:var(--font-display); font-weight:700; font-size:20px; color:var(--text-dim);
+  }
+  .cast-card .name{ font-size:10.5px; font-weight:700; margin-top:7px; line-height:1.25; }
+  .cast-card .character{ font-size:9.5px; color:var(--text-dim); margin-top:2px; line-height:1.25; }
+
+  .tag-row{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px; }
+  .tag{
+    background:var(--glass); border:1px solid var(--glass-border-soft);
+    border-radius:var(--r-pill); padding:5px 12px;
+    font-size:10.5px; color:var(--text-dim); font-family:var(--font-mono);
+  }
+  .tag.adapt{ color:var(--accent); border-color:rgba(232,163,61,0.4); }
+
+  .info-row{
+    display:flex; justify-content:space-between; align-items:baseline; gap:14px;
+    padding:8px 0; border-bottom:1px solid var(--glass-border-soft);
+  }
+  .info-row:last-child{ border-bottom:none; }
+  .info-row .k{ font-family:var(--font-mono); font-size:10px; letter-spacing:0.03em; color:var(--text-dim); flex-shrink:0; }
+  .info-row .v{ font-size:12.5px; font-weight:600; color:var(--text); text-align:right; }
+
+  .imdb-note{ font-size:11.5px; color:var(--text-faint); line-height:1.6; margin-top:12px; }
+
+  .wiki-ref{ font-size:13px; line-height:1.7; color:var(--text); }
+  .wiki-ref .src{
+    font-family:var(--font-mono); font-size:10px; letter-spacing:0.05em; text-transform:uppercase;
+    color:var(--text-faint); margin-top:10px; display:block;
+  }
+
+  /* ---------- pessoa clicável (diretor / elenco) ---------- */
+  .person-link{
+    background:none; border:none; padding:0; margin:0;
+    color:inherit; font:inherit; font-weight:inherit; cursor:pointer;
+    text-decoration:underline; text-decoration-color:var(--glass-border-soft); text-underline-offset:3px;
+  }
+  .person-link:hover{ color:var(--accent); }
+  .cast-card{ cursor:pointer; background:none; border:none; padding:0; font:inherit; color:inherit; }
+
+  .person-hero{ position:relative; display:flex; gap:16px; padding:18px 20px; }
+  .person-hero img, .person-hero .no-photo{
+    width:96px; height:96px; border-radius:50%; object-fit:cover;
+    border:1px solid var(--glass-border-soft); flex-shrink:0;
+  }
+  .person-hero .no-photo{
+    display:flex; align-items:center; justify-content:center;
+    background:var(--glass); font-family:var(--font-display); font-weight:700; font-size:30px; color:var(--text-dim);
+  }
+  .person-hero .p-name{ font-family:var(--font-display); font-weight:800; font-size:18px; line-height:1.25; margin-bottom:8px; padding-top:2px; }
+  .person-hero .p-meta{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim); line-height:1.9; }
+
+  .bio-text{ font-size:13px; line-height:1.7; }
+  .bio-lang-note{
+    font-family:var(--font-mono); font-size:9.5px; color:var(--text-faint);
+    margin-top:10px; display:block;
+  }
+
+  /* ---------- importar / exportar ---------- */
+  .file-row{ margin-bottom:14px; }
+  .file-row label{
+    display:block; font-family:var(--font-mono); font-size:10px; color:var(--text-dim);
+    margin-bottom:7px; letter-spacing:0.03em; text-transform:uppercase;
+  }
+  .file-row input[type="file"]{
+    width:100%; font-size:11.5px; color:var(--text-dim); font-family:var(--font-body);
+  }
+  .file-row input[type="file"]::file-selector-button{
+    background:var(--glass); border:1px solid var(--glass-border-soft); color:var(--text);
+    border-radius:var(--r-pill); padding:7px 12px; font-family:var(--font-body); font-weight:600;
+    font-size:11px; margin-right:10px; cursor:pointer;
+  }
+
+  /* ---------- diário: cabeçalho de data ---------- */
+  .diary-date-header{
+    font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim);
+    letter-spacing:0.04em; text-transform:capitalize;
+    margin:22px 4px 10px;
+  }
+  .diary-date-header:first-child{ margin-top:2px; }
+
+  /* ---------- perfil: foto e redes sociais ---------- */
+  .avatar-big{
+    width:72px; height:72px; border-radius:50%; flex-shrink:0; overflow:hidden;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:800; font-size:26px; color:#1A1200;
+  }
+  .avatar-big img{ width:100%; height:100%; object-fit:cover; }
+  .social-row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
+  .social-row .auth-input{ margin-bottom:0; }
+  .social-row .remove-social{
+    flex:0 0 auto; width:38px; height:38px; border-radius:50%;
+    background:var(--glass); border:1px solid var(--glass-border-soft); color:var(--text-dim);
+    font-size:16px; cursor:pointer;
+  }
+  .cover-rail{
+    display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:12px;
+    scrollbar-width:none;
+  }
+  .cover-rail::-webkit-scrollbar{ display:none; }
+  .cover-thumb{
+    flex-shrink:0; width:56px; aspect-ratio:2/3;
+    border-radius:10px; overflow:hidden; padding:0;
+    border:2px solid transparent; cursor:pointer; background:var(--glass);
+  }
+  .cover-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .cover-thumb.active{ border-color:var(--accent); }
+  .custom-cover-row{ display:flex; gap:8px; margin-bottom:8px; }
+  .custom-cover-row .auth-input{ margin-bottom:0; }
+
+  /* ---------- share ---------- */
+  #shareResult img{ width:100%; border-radius:14px; margin:10px 0; border:1px solid var(--glass-border-soft); display:block; }
+
+  .auth-input.small-link{
+    font-family:var(--font-mono); font-size:11px; color:var(--text-dim); background:none; border:none;
+    text-decoration:underline; cursor:pointer; padding:6px 0; width:auto;
+  }
+  #syncStatus .status-ok{ color:var(--accent); }
+  #syncStatus .status-error{ color:var(--accent-2); }
+
+  ::-webkit-scrollbar{ width:0; height:0; }
+</style>
+</head>
+<body>
+
+<div class="orb-field">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
+<div id="authScreen">
+  <div class="auth-card glass">
+    <div class="mark">ST<em>U</em>B</div>
+    <div class="tagline">um diário de cinema</div>
+    <div id="authBody"></div>
+  </div>
+</div>
+
+<div id="app">
+
+  <header class="topbar glass">
+    <div>
+      <div class="mark">ST<em>U</em>B</div>
+      <div class="tagline">um diário de cinema</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="topbarImportExport" title="Importar e exportar dados">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+      </button>
+      <button class="avatar" id="topbarAvatar" title="Editar perfil">?</button>
+    </div>
+  </header>
+
+  <div class="config-banner glass" id="configBanner">
+    Chave da TMDB não configurada. Abra este arquivo em um editor de texto,
+    procure por <strong>TMDB_TOKEN</strong> no início do &lt;script&gt; e cole
+    seu token de leitura (v4 Bearer Token) da TMDB ali.
+  </div>
+
+  <main>
+
+    <section class="view active" id="view-diary">
+      <div class="search-box glass" style="margin:0 4px 18px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="diarySearchInput" placeholder="Buscar no seu diário…" autocomplete="off">
+      </div>
+      <div id="diaryList"></div>
+    </section>
+
+    <section class="view" id="view-search">
+      <div class="search-box glass">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Buscar um filme…" autocomplete="off">
+      </div>
+      <div id="trendingSection">
+        <div class="section-label">Em alta essa semana</div>
+        <div id="trendingRail" class="trending-rail"></div>
+      </div>
+      <div id="searchResults"></div>
+    </section>
+
+    <section class="view" id="view-watchlist">
+      <div class="section-label">Favoritos</div>
+      <div id="favoritesGrid" class="poster-grid" style="margin-bottom:26px"></div>
+      <div class="section-label">Quero assistir</div>
+      <div id="watchlistGrid" class="poster-grid"></div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <div class="pill glass">
+      <button class="tab-btn active" data-view="diary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="4" x2="8" y2="9"/><line x1="16" y1="4" x2="16" y2="9"/></svg>
+        Diário
+      </button>
+      <button class="tab-btn" data-view="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Buscar
+      </button>
+      <button class="tab-btn" data-view="watchlist">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3h12v18l-6-4.5L6 21V3z"/></svg>
+        Lista
+      </button>
+    </div>
+  </nav>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<div class="modal-overlay" id="personOverlay">
+  <div class="modal" id="personContent"></div>
+</div>
+
+<div class="modal-overlay" id="ieOverlay">
+  <div class="modal" id="ieContent"></div>
+</div>
+
+<div class="modal-overlay" id="profileOverlay">
+  <div class="modal" id="profileContent"></div>
+</div>
+
+<script>
+(function(){
+
+  /* ======= CONFIGURE AQUI ======= */
+  const TMDB_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJhMWRjNGNlZGM5OTc3NDU3MzFmMjY2YjU4YTFlNWFhNSIsIm5iZiI6MTc4MzY5MTkyMy43MjgsInN1YiI6IjZhNTBmYTkzMjkwOTc5MDMxMWNhZDE4YSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.n4IwKyZI05DjOVuGWpGsIpxJ29FyGSxv1L2L4SmLYI0"; // Bearer Read Access Token (v4) da TMDB
+  /* =============================== */
+
+  const IMG = "https://image.tmdb.org/t/p/w500";
+  const PROFILE_IMG = "https://image.tmdb.org/t/p/w185";
+  const API = "https://api.themoviedb.org/3";
+  function defaultProfileInfo(){
+    return { avatar: null, fullName: "", username: "", bio: "", location: "", website: "", social: [] };
+  }
+
+  const state = {
+    watched: [],
+    watchlist: [],
+    favorites: [],
+    posterOverrides: {},
+    profile: defaultProfileInfo(),
+    trending: null,
+    activeView: "diary",
+    activeMovie: null,
+    searchTimer: null
+  };
+
+  let session = null; // { id, email }
+  let authMode = "signin";
+  let authError = "";
+  let pendingEmail = "";
+
+  const hasToken = TMDB_TOKEN && TMDB_TOKEN !== "COLE_SEU_TOKEN_TMDB_AQUI";
+  document.getElementById("configBanner").classList.toggle("show", !hasToken);
+
+  /* ================= CONTA (Supabase Auth + Postgres) =================
+     Login de verdade por e-mail/senha. O Supabase cuida da autenticação e
+     guarda os dados numa tabela protegida por Row Level Security — só o
+     dono da conta consegue ler ou escrever a própria linha. */
+
+  const SUPABASE_URL = "https://lxgryvibisebhtvrznun.supabase.co";       // ex: https://xxxxxxxx.supabase.co
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4Z3J5dmliaXNlYmh0dnJ6bnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzOTcwODksImV4cCI6MjEwMzk3MzA4OX0.NliLkqRXDvZLsaLXh8g2BJkd1hAV0oiT_wFtanjRANQ";     // Project Settings > API > anon public key
+
+  const hasSupabase = SUPABASE_URL.indexOf("http") === 0 && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf("COLE_") !== 0;
+  const sb = hasSupabase ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+  function friendlyAuthError(msg){
+    const map = {
+      "Invalid login credentials": "E-mail ou senha incorretos.",
+      "User already registered": "Já existe uma conta com esse e-mail.",
+      "Email not confirmed": "Confirme seu e-mail antes de entrar (verifique sua caixa de entrada).",
+      "Password should be at least 6 characters.": "A senha precisa ter ao menos 6 caracteres."
+    };
+    return map[msg] || msg;
+  }
+
+  async function handleSignedIn(sbSession){
+    session = { id: sbSession.user.id, email: sbSession.user.email };
+    await loadUserRow();
+    enterApp();
+  }
+
+  async function loadUserRow(){
+    try{
+      const { data, error } = await sb.from("stub_data").select("data").eq("user_id", session.id).maybeSingle();
+      if(error) throw error;
+      if(data && data.data){
+        const d = data.data;
+        state.watched = d.watched || [];
+        state.watchlist = d.watchlist || [];
+        state.favorites = d.favorites || [];
+        state.posterOverrides = d.posterOverrides || {};
+        state.profile = Object.assign(defaultProfileInfo(), d.profile || {});
+      }else{
+        state.watched = []; state.watchlist = []; state.favorites = []; state.posterOverrides = {};
+        state.profile = defaultProfileInfo();
+        await saveState();
+      }
+    }catch(e){
+      console.warn("Não foi possível carregar dados do Supabase:", e);
+      state.watched = []; state.watchlist = []; state.favorites = []; state.posterOverrides = {};
+      state.profile = defaultProfileInfo();
+    }
+  }
+
+  async function saveState(){
+    if(!session || !sb) return;
+    try{
+      const { error } = await sb.from("stub_data").upsert({
+        user_id: session.id,
+        data: {
+          watched: state.watched, watchlist: state.watchlist,
+          favorites: state.favorites, posterOverrides: state.posterOverrides,
+          profile: state.profile
+        },
+        updated_at: new Date().toISOString()
+      });
+      if(error) console.warn("Não foi possível salvar no Supabase:", error.message);
+    }catch(e){
+      console.warn("Não foi possível salvar no Supabase:", e);
+    }
+  }
+
+  async function signOutUser(){
+    if(sb) await sb.auth.signOut();
+    session = null;
+    state.watched = []; state.watchlist = []; state.favorites = []; state.posterOverrides = {};
+    state.profile = defaultProfileInfo();
+    state.activeView = "diary";
+    document.getElementById("app").classList.remove("show");
+    document.getElementById("authScreen").classList.remove("hide");
+    authMode = "signin"; authError = "";
+    renderAuth();
+  }
+
+  function refreshAvatarUI(){
+    const btn = document.getElementById("topbarAvatar");
+    if(state.profile && state.profile.avatar){
+      btn.innerHTML = '<img src="' + state.profile.avatar + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover">';
+    }else{
+      btn.textContent = displayName().charAt(0).toUpperCase();
+    }
+  }
+
+  function enterApp(){
+    document.getElementById("authScreen").classList.add("hide");
+    document.getElementById("app").classList.add("show");
+    refreshAvatarUI();
+    switchView("diary");
+  }
+
+  async function doSignIn(){
+    const email = document.getElementById("authEmail").value.trim();
+    const pass = document.getElementById("authPassword").value;
+    if(!email || !pass){ authError = "Preencha e-mail e senha."; renderAuth(); return; }
+    authError = "";
+    document.getElementById("authBody").innerHTML = '<div class="auth-heading">Entrando…</div>';
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if(error){ authError = friendlyAuthError(error.message); authMode = "signin"; renderAuth(); return; }
+    await handleSignedIn(data.session);
+  }
+
+  async function doSignUp(){
+    const email = document.getElementById("authEmail").value.trim();
+    const pass = document.getElementById("authPassword").value;
+    const pass2 = document.getElementById("authPassword2").value;
+    if(!email || pass.length < 6){ authError = "A senha precisa ter ao menos 6 caracteres."; renderAuth(); return; }
+    if(pass !== pass2){ authError = "As senhas não coincidem."; renderAuth(); return; }
+    authError = "";
+    document.getElementById("authBody").innerHTML = '<div class="auth-heading">Criando conta…</div>';
+    const { data, error } = await sb.auth.signUp({ email, password: pass });
+    if(error){ authError = friendlyAuthError(error.message); authMode = "signup"; renderAuth(); return; }
+    if(data.session){
+      await handleSignedIn(data.session);
+    }else{
+      pendingEmail = email;
+      authMode = "checkEmail";
+      renderAuth();
+    }
+  }
+
+  async function doForgotPassword(){
+    const email = document.getElementById("authEmail").value.trim();
+    if(!email){ authError = "Informe seu e-mail."; renderAuth(); return; }
+    authError = "";
+    document.getElementById("authBody").innerHTML = '<div class="auth-heading">Enviando…</div>';
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+    if(error){ authError = friendlyAuthError(error.message); authMode = "forgot"; renderAuth(); return; }
+    pendingEmail = email;
+    authMode = "checkEmail";
+    renderAuth();
+  }
+
+  async function doUpdateRecoveryPassword(){
+    const p1 = document.getElementById("recoveryPass").value;
+    const p2 = document.getElementById("recoveryPass2").value;
+    if(p1.length < 6){ authError = "A senha precisa ter ao menos 6 caracteres."; renderAuth(); return; }
+    if(p1 !== p2){ authError = "As senhas não coincidem."; renderAuth(); return; }
+    authError = "";
+    document.getElementById("authBody").innerHTML = '<div class="auth-heading">Salvando…</div>';
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    if(error){ authError = friendlyAuthError(error.message); authMode = "recovery"; renderAuth(); return; }
+    const { data } = await sb.auth.getSession();
+    if(data.session) await handleSignedIn(data.session);
+    else{ authMode = "signin"; renderAuth(); }
+  }
+
+  /* ---------- tela de autenticação ---------- */
+  function renderAuth(){
+    const el = document.getElementById("authBody");
+
+    if(!hasSupabase){
+      el.innerHTML = '<div class="auth-error">Configure <strong>SUPABASE_URL</strong> e <strong>SUPABASE_ANON_KEY</strong> no início do &lt;script&gt; (comentário "CONTA") para ativar contas e login. Veja as instruções que passei no chat.</div>';
+      return;
+    }
+
+    if(authMode === "signin"){
+      el.innerHTML =
+        '<div class="auth-heading">Entrar</div>' +
+        (authError ? '<div class="auth-error">' + authError + '</div>' : "") +
+        '<input type="email" id="authEmail" class="auth-input" placeholder="E-mail" autocomplete="email">' +
+        '<input type="password" id="authPassword" class="auth-input" placeholder="Senha" autocomplete="current-password">' +
+        '<div class="btn-row"><button class="btn primary" id="btnSignIn">Entrar</button></div>' +
+        '<button class="auth-input small-link" id="btnGoForgot">Esqueci minha senha</button>' +
+        '<button class="btn ghost" id="btnGoSignup" style="width:100%; margin-top:6px">Criar conta</button>';
+      const pw = document.getElementById("authPassword");
+      pw.addEventListener("keydown", (e) => { if(e.key === "Enter") document.getElementById("btnSignIn").click(); });
+      document.getElementById("btnSignIn").addEventListener("click", doSignIn);
+      document.getElementById("btnGoForgot").addEventListener("click", () => { authMode = "forgot"; authError = ""; renderAuth(); });
+      document.getElementById("btnGoSignup").addEventListener("click", () => { authMode = "signup"; authError = ""; renderAuth(); });
+
+    }else if(authMode === "signup"){
+      el.innerHTML =
+        '<div class="auth-heading">Criar conta</div>' +
+        (authError ? '<div class="auth-error">' + authError + '</div>' : "") +
+        '<input type="email" id="authEmail" class="auth-input" placeholder="E-mail" autocomplete="email">' +
+        '<input type="password" id="authPassword" class="auth-input" placeholder="Senha (mín. 6 caracteres)" autocomplete="new-password">' +
+        '<input type="password" id="authPassword2" class="auth-input" placeholder="Confirmar senha" autocomplete="new-password">' +
+        '<div class="btn-row"><button class="btn primary" id="btnSignUp">Criar conta</button></div>' +
+        '<button class="btn ghost" id="btnGoSignin" style="width:100%">Já tenho conta</button>';
+      document.getElementById("btnSignUp").addEventListener("click", doSignUp);
+      document.getElementById("btnGoSignin").addEventListener("click", () => { authMode = "signin"; authError = ""; renderAuth(); });
+
+    }else if(authMode === "forgot"){
+      el.innerHTML =
+        '<div class="auth-heading">Redefinir senha</div>' +
+        (authError ? '<div class="auth-error">' + authError + '</div>' : "") +
+        '<input type="email" id="authEmail" class="auth-input" placeholder="Seu e-mail" autocomplete="email">' +
+        '<div class="btn-row"><button class="btn primary" id="btnSendReset">Enviar link de redefinição</button></div>' +
+        '<button class="btn ghost" id="btnBackSignin" style="width:100%">Voltar</button>';
+      document.getElementById("btnSendReset").addEventListener("click", doForgotPassword);
+      document.getElementById("btnBackSignin").addEventListener("click", () => { authMode = "signin"; authError = ""; renderAuth(); });
+
+    }else if(authMode === "checkEmail"){
+      el.innerHTML =
+        '<div class="auth-heading">Verifique seu e-mail</div>' +
+        '<div class="block-label" style="text-align:left; line-height:1.6">Enviamos um link para <strong style="color:var(--text)">' + pendingEmail + '</strong>. Depois de confirmar, é só entrar normalmente.</div>' +
+        '<div class="btn-row"><button class="btn ghost" id="btnBackSignin2" style="width:100%">Voltar para entrar</button></div>';
+      document.getElementById("btnBackSignin2").addEventListener("click", () => { authMode = "signin"; authError = ""; renderAuth(); });
+
+    }else if(authMode === "recovery"){
+      el.innerHTML =
+        '<div class="auth-heading">Nova senha</div>' +
+        (authError ? '<div class="auth-error">' + authError + '</div>' : "") +
+        '<input type="password" id="recoveryPass" class="auth-input" placeholder="Nova senha (mín. 6 caracteres)">' +
+        '<input type="password" id="recoveryPass2" class="auth-input" placeholder="Confirmar nova senha">' +
+        '<div class="btn-row"><button class="btn primary" id="btnSaveRecovery">Salvar nova senha</button></div>';
+      document.getElementById("btnSaveRecovery").addEventListener("click", doUpdateRecoveryPassword);
+    }
+  }
+
+  document.getElementById("topbarAvatar").addEventListener("click", openProfilePanel);
+  document.getElementById("topbarImportExport").addEventListener("click", openIEPanel);
+
+
+  /* ================= IMPORTAR / EXPORTAR ================= */
+
+  function openIEPanel(){ renderIEPanel(); document.getElementById("ieOverlay").classList.add("show"); }
+  function closeIEPanel(){ document.getElementById("ieOverlay").classList.remove("show"); }
+  document.getElementById("ieOverlay").addEventListener("click", (e) => { if(e.target.id === "ieOverlay") closeIEPanel(); });
+
+  /* parser de CSV simples, com suporte a campos entre aspas (vírgulas e quebras de linha dentro do texto) */
+  function parseCSV(text){
+    const rows = [];
+    let i = 0, field = "", row = [], inQuotes = false;
+    const len = text.length;
+    while(i < len){
+      const c = text[i];
+      if(inQuotes){
+        if(c === '"'){
+          if(text[i+1] === '"'){ field += '"'; i += 2; continue; }
+          inQuotes = false; i++; continue;
+        }
+        field += c; i++; continue;
+      }else{
+        if(c === '"'){ inQuotes = true; i++; continue; }
+        if(c === ','){ row.push(field); field = ""; i++; continue; }
+        if(c === '\r'){ i++; continue; }
+        if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+        field += c; i++; continue;
+      }
+    }
+    if(field.length || row.length){ row.push(field); rows.push(row); }
+    if(!rows.length) return [];
+    const headers = rows[0].map(h => h.trim());
+    return rows.slice(1).filter(r => r.length > 1 || r[0]).map(r => {
+      const obj = {};
+      headers.forEach((h, idx) => obj[h] = (r[idx] !== undefined ? r[idx] : "").trim());
+      return obj;
+    });
+  }
+
+  async function tmdbFindMatch(name, year){
+    if(!name || !hasToken) return null;
+    try{
+      let data = await tmdb("/search/movie", { query: name, year: year || "", language: "pt-BR" });
+      let r = (data.results || [])[0];
+      if(!r){
+        data = await tmdb("/search/movie", { query: name, language: "pt-BR" });
+        r = (data.results || [])[0];
+      }
+      return r || null;
+    }catch(e){ return null; }
+  }
+
+  function ieStatusHTML(msg, isError){
+    return '<div class="' + (isError ? "auth-error" : "block-label") + '" style="margin:0 20px 16px">' + msg + '</div>';
+  }
+
+  async function importLetterboxdProfileRow(file){
+    const rows = parseCSV(await file.text());
+    if(!rows.length) return null;
+    const r = rows[0];
+    const given = r["Given Name"] || r["First Name"] || "";
+    const family = r["Family Name"] || r["Last Name"] || "";
+    const name = r["Name"] || ((given || family) ? (given + " " + family).trim() : "");
+    return {
+      name: name,
+      username: r["Username"] || r["User Name"] || "",
+      bio: r["Bio"] || r["About"] || "",
+      location: r["Location"] || "",
+      website: r["Website"] || r["Site"] || ""
+    };
+  }
+
+  async function handleImportLetterboxd(){
+    const profileFile = document.getElementById("lbProfileFile").files[0];
+    const diaryFile = document.getElementById("lbDiaryFile").files[0];
+    const reviewsFile = document.getElementById("lbReviewsFile").files[0];
+    const watchlistFile = document.getElementById("lbWatchlistFile").files[0];
+    const likesFile = document.getElementById("lbLikesFile").files[0];
+    const statusEl = document.getElementById("ieStatus");
+
+    if(!diaryFile && !watchlistFile && !likesFile && !profileFile){
+      statusEl.innerHTML = ieStatusHTML("Selecione ao menos um arquivo CSV.", true);
+      return;
+    }
+    if(!hasToken){
+      statusEl.innerHTML = ieStatusHTML("Configure seu token da TMDB no arquivo para poder importar.", true);
+      return;
+    }
+
+    let profileImported = false;
+    if(profileFile){
+      try{
+        const p = await importLetterboxdProfileRow(profileFile);
+        if(p){
+          if(p.name) renameProfile(p.name);
+          state.profile.username = p.username || state.profile.username;
+          state.profile.bio = p.bio || state.profile.bio;
+          state.profile.location = p.location || state.profile.location;
+          state.profile.website = p.website || state.profile.website;
+          profileImported = true;
+        }
+      }catch(e){}
+    }
+
+    const diaryRows = diaryFile ? parseCSV(await diaryFile.text()) : [];
+    const reviewRows = reviewsFile ? parseCSV(await reviewsFile.text()) : [];
+    const watchlistRows = watchlistFile ? parseCSV(await watchlistFile.text()) : [];
+    const likesRows = likesFile ? parseCSV(await likesFile.text()) : [];
+
+    const reviewMap = {};
+    reviewRows.forEach(r => {
+      const key = (r["Name"] || "") + "|" + (r["Year"] || "") + "|" + (r["Watched Date"] || r["Date"] || "");
+      reviewMap[key] = r["Review"] || "";
+    });
+
+    const total = diaryRows.length + watchlistRows.length + likesRows.length;
+    let done = 0, impWatched = 0, impWatchlist = 0, impFav = 0;
+    const notFound = [];
+    function bump(){ done++; statusEl.innerHTML = ieStatusHTML("Importando… " + done + "/" + total, false); }
+
+    for(const row of diaryRows){
+      const name = row["Name"], year = row["Year"];
+      const match = await tmdbFindMatch(name, year);
+      if(!match){ notFound.push(name + (year ? " (" + year + ")" : "")); bump(); continue; }
+      const key = name + "|" + year + "|" + (row["Watched Date"] || row["Date"] || "");
+      const ratingNum = row["Rating"] ? Math.round(parseFloat(row["Rating"])) : 0;
+      const entry = {
+        id: match.id, title: match.title, poster_path: match.poster_path,
+        year: (match.release_date || "").slice(0,4) || year,
+        rating: isNaN(ratingNum) ? 0 : Math.max(0, Math.min(5, ratingNum)),
+        watchedDate: row["Watched Date"] || row["Date"] || new Date().toISOString().slice(0,10),
+        comment: reviewMap[key] || ""
+      };
+      state.watched = state.watched.filter(x => x.id !== entry.id);
+      state.watched.push(entry);
+      impWatched++;
+      bump();
+    }
+
+    for(const row of watchlistRows){
+      const name = row["Name"], year = row["Year"];
+      const match = await tmdbFindMatch(name, year);
+      if(!match){ notFound.push(name + (year ? " (" + year + ")" : "")); bump(); continue; }
+      if(!state.watchlist.some(x => x.id === match.id) && !state.watched.some(x => x.id === match.id)){
+        state.watchlist.push({ id: match.id, title: match.title, poster_path: match.poster_path, year: (match.release_date || "").slice(0,4) });
+        impWatchlist++;
+      }
+      bump();
+    }
+
+    for(const row of likesRows){
+      const name = row["Name"], year = row["Year"];
+      const match = await tmdbFindMatch(name, year);
+      if(!match){ notFound.push(name + (year ? " (" + year + ")" : "")); bump(); continue; }
+      if(!state.favorites.some(x => x.id === match.id)){
+        state.favorites.push({ id: match.id, title: match.title, poster_path: match.poster_path, year: (match.release_date || "").slice(0,4) });
+        impFav++;
+      }
+      bump();
+    }
+
+    await saveState();
+    refreshLists();
+
+    let summary = (profileImported ? "Perfil importado. " : "") + impWatched + " no diário, " + impWatchlist + " na lista, " + impFav + " nos favoritos.";
+    if(notFound.length) summary += " " + notFound.length + " não encontrados na TMDB.";
+    statusEl.innerHTML = ieStatusHTML(summary, false) +
+      (notFound.length ? '<div class="imdb-note" style="margin:0 20px 16px">Não encontrados: ' + notFound.slice(0,15).join(", ") + (notFound.length > 15 ? "…" : "") + '</div>' : "");
+  }
+
+  function exportStubBackup(){
+    const payload = {
+      app: "stub", v: 1, exportedAt: new Date().toISOString(),
+      watched: state.watched, watchlist: state.watchlist,
+      favorites: state.favorites, posterOverrides: state.posterOverrides,
+      profile: state.profile
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "stub-backup-" + (session ? displayName().replace(/\s+/g, "_") : "perfil") + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  async function handleImportStubBackup(){
+    const file = document.getElementById("stubBackupFile").files[0];
+    const statusEl = document.getElementById("ieStatus");
+    if(!file){ statusEl.innerHTML = ieStatusHTML("Selecione um arquivo .json.", true); return; }
+    try{
+      const data = JSON.parse(await file.text());
+      if(!data || data.app !== "stub") throw new Error("bad-format");
+      state.watched = data.watched || [];
+      state.watchlist = data.watchlist || [];
+      state.favorites = data.favorites || [];
+      state.posterOverrides = data.posterOverrides || {};
+      state.profile = data.profile || defaultProfileInfo();
+      await saveState();
+      refreshLists();
+      statusEl.innerHTML = ieStatusHTML("Backup restaurado com sucesso.", false);
+    }catch(e){
+      statusEl.innerHTML = ieStatusHTML("Esse arquivo não parece ser um backup válido do STUB.", true);
+    }
+  }
+
+  function renderIEPanel(){
+    const el = document.getElementById("ieContent");
+    el.innerHTML =
+      '<div class="handle"></div>' +
+      '<div class="hero" style="padding-bottom:6px">' +
+        '<button class="close" id="ieClose">×</button>' +
+        '<div class="h-info">' +
+          '<div class="h-title">Importar e exportar</div>' +
+          '<div class="h-meta">Traga seu histórico do Letterboxd e mantenha um backup dos seus dados do STUB.</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Importar do Letterboxd</div>' +
+        '<div class="imdb-note" style="margin-bottom:14px">Exporte seus dados em ' +
+          '<a href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener" style="color:var(--accent)">letterboxd.com/settings/data</a>' +
+          ', extraia o .zip baixado e envie os CSVs abaixo (o que você tiver). Cada filme é buscado na TMDB pelo título e ano — notas de meia estrela são arredondadas para o inteiro mais próximo. O export do Letterboxd não inclui a foto de perfil; adicione a sua em "Editar perfil".</div>' +
+        '<div class="file-row"><label>Perfil — opcional (profile.csv)</label><input type="file" id="lbProfileFile" accept=".csv"></div>' +
+        '<div class="file-row"><label>Diário (diary.csv)</label><input type="file" id="lbDiaryFile" accept=".csv"></div>' +
+        '<div class="file-row"><label>Resenhas — opcional (reviews.csv)</label><input type="file" id="lbReviewsFile" accept=".csv"></div>' +
+        '<div class="file-row"><label>Quero assistir (watchlist.csv)</label><input type="file" id="lbWatchlistFile" accept=".csv"></div>' +
+        '<div class="file-row"><label>Favoritos — opcional (likes/films.csv)</label><input type="file" id="lbLikesFile" accept=".csv"></div>' +
+        '<div class="btn-row"><button class="btn primary" id="btnImportLB" style="width:100%">Importar</button></div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Backup do STUB</div>' +
+        '<div class="btn-row"><button class="btn ghost" id="btnExportStub" style="width:100%">Exportar backup (.json)</button></div>' +
+        '<div class="file-row" style="margin-top:10px"><label>Restaurar backup (.json)</label><input type="file" id="stubBackupFile" accept=".json"></div>' +
+        '<div class="btn-row"><button class="btn ghost" id="btnImportStub" style="width:100%">Restaurar</button></div>' +
+      '</div>' +
+      '<div id="ieStatus"></div>';
+
+    document.getElementById("ieClose").addEventListener("click", closeIEPanel);
+    document.getElementById("btnImportLB").addEventListener("click", handleImportLetterboxd);
+    document.getElementById("btnExportStub").addEventListener("click", exportStubBackup);
+    document.getElementById("btnImportStub").addEventListener("click", handleImportStubBackup);
+  }
+
+  /* ================= EDITAR PERFIL ================= */
+
+  function openProfilePanel(){ renderProfilePanel(); document.getElementById("profileOverlay").classList.add("show"); }
+  function closeProfilePanel(){ document.getElementById("profileOverlay").classList.remove("show"); }
+  document.getElementById("profileOverlay").addEventListener("click", (e) => { if(e.target.id === "profileOverlay") closeProfilePanel(); });
+
+  function profileStatusHTML(msg, isError){
+    return '<div class="' + (isError ? "auth-error" : "block-label") + '" style="margin:0 20px 16px">' + msg + '</div>';
+  }
+
+  /* redimensiona a foto enviada para manter o backup/perfil leve */
+  function resizeImageFile(file, maxSize){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          if(w > h){ if(w > maxSize){ h = Math.round(h * maxSize / w); w = maxSize; } }
+          else{ if(h > maxSize){ w = Math.round(w * maxSize / h); h = maxSize; } }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  let profileDraftSocial = [];
+
+  function displayName(){
+    return (state.profile && (state.profile.fullName || state.profile.username)) || (session && session.email) || "?";
+  }
+
+  function renderSocialRows(){
+    const wrap = document.getElementById("socialRowsWrap");
+    if(!wrap) return;
+    wrap.innerHTML = profileDraftSocial.map((s, idx) =>
+      '<div class="social-row">' +
+        '<input type="text" class="auth-input social-label" data-idx="' + idx + '" placeholder="Rede (ex: Instagram)" value="' + (s.label||"").replace(/"/g,'') + '" style="flex:1">' +
+        '<input type="text" class="auth-input social-url" data-idx="' + idx + '" placeholder="Link" value="' + (s.url||"").replace(/"/g,'') + '" style="flex:1.6">' +
+        '<button class="remove-social" data-remove-social="' + idx + '">×</button>' +
+      '</div>'
+    ).join("");
+    wrap.querySelectorAll(".social-label").forEach(inp => inp.addEventListener("input", e => { profileDraftSocial[parseInt(e.target.dataset.idx,10)].label = e.target.value; }));
+    wrap.querySelectorAll(".social-url").forEach(inp => inp.addEventListener("input", e => { profileDraftSocial[parseInt(e.target.dataset.idx,10)].url = e.target.value; }));
+    wrap.querySelectorAll("[data-remove-social]").forEach(btn => btn.addEventListener("click", () => {
+      profileDraftSocial.splice(parseInt(btn.dataset.removeSocial,10), 1);
+      renderSocialRows();
+    }));
+  }
+
+  async function changeAccountPassword(newPass){
+    if(!sb) return { ok:false, error:"Supabase não configurado." };
+    const { error } = await sb.auth.updateUser({ password: newPass });
+    if(error) return { ok:false, error: friendlyAuthError(error.message) };
+    return { ok:true };
+  }
+
+  async function wipeMyData(){
+    state.watched = []; state.watchlist = []; state.favorites = []; state.posterOverrides = {};
+    state.profile = defaultProfileInfo();
+    await saveState();
+    refreshAvatarUI();
+    closeProfilePanel();
+    switchView("diary");
+  }
+
+  function renderProfilePanel(){
+    const el = document.getElementById("profileContent");
+    if(!session) return;
+    const prof = state.profile || defaultProfileInfo();
+    profileDraftSocial = (prof.social || []).map(s => ({ ...s }));
+
+    el.innerHTML =
+      '<div class="handle"></div>' +
+      '<div class="person-hero">' +
+        '<button class="close" id="profileClose">×</button>' +
+        '<div class="avatar-big" id="avatarBigPreview">' + (prof.avatar ? '<img src="' + prof.avatar + '">' : displayName().charAt(0).toUpperCase()) + '</div>' +
+        '<div><div class="p-name">' + displayName() + '</div><div class="p-meta">' + session.email + '</div></div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Foto de perfil</div>' +
+        '<input type="file" id="avatarFileInput" accept="image/*" style="margin-bottom:10px">' +
+        '<input type="text" id="avatarUrlInput" class="auth-input" placeholder="ou cole o link de uma imagem">' +
+        '<div class="btn-row">' +
+          '<button class="btn ghost" id="btnApplyAvatarUrl" style="flex:1">Usar link</button>' +
+          (prof.avatar ? '<button class="btn ghost" id="btnRemoveAvatar" style="flex:1">Remover foto</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Nome</div>' +
+        '<input type="text" id="profileNameInput" class="auth-input" placeholder="Como quer ser chamado" value="' + (prof.fullName||"").replace(/"/g,'') + '" maxlength="40">' +
+        '<div class="block-label" style="margin-top:14px">Nome de usuário</div>' +
+        '<input type="text" id="usernameInput" class="auth-input" placeholder="@seuusuario" value="' + (prof.username||"").replace(/"/g,'') + '">' +
+        '<div class="block-label" style="margin-top:14px">Bio</div>' +
+        '<textarea class="comment-input" id="bioInput" placeholder="Fale um pouco sobre você">' + (prof.bio||"") + '</textarea>' +
+        '<div class="block-label">Localização</div>' +
+        '<input type="text" id="locationInput" class="auth-input" placeholder="Cidade, país" value="' + (prof.location||"").replace(/"/g,'') + '">' +
+        '<div class="block-label" style="margin-top:14px">Site</div>' +
+        '<input type="text" id="websiteInput" class="auth-input" placeholder="https://…" value="' + (prof.website||"").replace(/"/g,'') + '">' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Redes sociais</div>' +
+        '<div id="socialRowsWrap"></div>' +
+        '<div class="btn-row"><button class="btn ghost" id="btnAddSocial" style="width:100%">+ Adicionar rede social</button></div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="btn-row"><button class="btn primary" id="btnSaveProfileInfo" style="width:100%">Salvar perfil</button></div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Alterar senha</div>' +
+        '<input type="password" id="newPassInput" class="auth-input" placeholder="Nova senha (mín. 6 caracteres)">' +
+        '<input type="password" id="newPassInput2" class="auth-input" placeholder="Confirmar nova senha">' +
+        '<div class="btn-row"><button class="btn primary" id="btnSavePass" style="width:100%">Salvar nova senha</button></div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Dados</div>' +
+        '<div class="btn-row"><button class="btn ghost" id="btnGoImport" style="width:100%">Importar do Letterboxd / backup</button></div>' +
+      '</div>' +
+      '<div id="profileStatus"></div>' +
+      '<div class="block">' +
+        '<div class="block-label">Zona de risco</div>' +
+        '<div class="imdb-note" style="margin-bottom:10px">Isso apaga diário, lista, favoritos e dados de perfil desta conta — mas não exclui a conta em si. Para excluir a conta (e-mail/senha) por completo, use o painel do seu projeto Supabase (Authentication → Users), já que isso exige permissões que o app não tem no navegador.</div>' +
+        '<div class="btn-row"><button class="btn danger" id="btnDeleteProfile" style="width:100%">Apagar todos os meus dados</button></div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="btn-row"><button class="btn ghost" id="btnSwitchProfile" style="width:100%">Sair</button></div>' +
+      '</div>';
+
+    renderSocialRows();
+    document.getElementById("profileClose").addEventListener("click", closeProfilePanel);
+
+    document.getElementById("avatarFileInput").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+      try{
+        const dataUrl = await resizeImageFile(file, 240);
+        state.profile.avatar = dataUrl;
+        await saveState();
+        refreshAvatarUI();
+        renderProfilePanel();
+        document.getElementById("profileStatus").innerHTML = profileStatusHTML("Foto atualizada.", false);
+      }catch(err){
+        document.getElementById("profileStatus").innerHTML = profileStatusHTML("Não foi possível usar essa imagem.", true);
+      }
+    });
+    document.getElementById("btnApplyAvatarUrl").addEventListener("click", async () => {
+      const val = document.getElementById("avatarUrlInput").value.trim();
+      if(!val || val.indexOf("http") !== 0) return;
+      state.profile.avatar = val;
+      await saveState();
+      refreshAvatarUI();
+      renderProfilePanel();
+      document.getElementById("profileStatus").innerHTML = profileStatusHTML("Foto atualizada.", false);
+    });
+    const rmAvatarBtn = document.getElementById("btnRemoveAvatar");
+    if(rmAvatarBtn){
+      rmAvatarBtn.addEventListener("click", async () => {
+        state.profile.avatar = null;
+        await saveState();
+        refreshAvatarUI();
+        renderProfilePanel();
+      });
+    }
+
+    document.getElementById("btnAddSocial").addEventListener("click", () => {
+      profileDraftSocial.push({ label: "", url: "" });
+      renderSocialRows();
+    });
+
+    document.getElementById("btnSaveProfileInfo").addEventListener("click", async () => {
+      state.profile.fullName = document.getElementById("profileNameInput").value.trim();
+      state.profile.username = document.getElementById("usernameInput").value.trim();
+      state.profile.bio = document.getElementById("bioInput").value.trim();
+      state.profile.location = document.getElementById("locationInput").value.trim();
+      state.profile.website = document.getElementById("websiteInput").value.trim();
+      state.profile.social = profileDraftSocial.filter(s => (s.url||"").trim());
+      await saveState();
+      refreshAvatarUI();
+      document.getElementById("profileStatus").innerHTML = profileStatusHTML("Perfil salvo.", false);
+      const nameEl = el.querySelector(".p-name");
+      if(nameEl) nameEl.textContent = displayName();
+    });
+
+    document.getElementById("btnSavePass").addEventListener("click", async () => {
+      const p1 = document.getElementById("newPassInput").value;
+      const p2 = document.getElementById("newPassInput2").value;
+      if(p1.length < 6){ document.getElementById("profileStatus").innerHTML = profileStatusHTML("A senha precisa ter ao menos 6 caracteres.", true); return; }
+      if(p1 !== p2){ document.getElementById("profileStatus").innerHTML = profileStatusHTML("As senhas não coincidem.", true); return; }
+      document.getElementById("profileStatus").innerHTML = profileStatusHTML("Atualizando…", false);
+      const r = await changeAccountPassword(p1);
+      document.getElementById("profileStatus").innerHTML = profileStatusHTML(r.ok ? "Senha atualizada." : r.error, !r.ok);
+    });
+
+    document.getElementById("btnGoImport").addEventListener("click", () => { closeProfilePanel(); openIEPanel(); });
+
+    document.getElementById("btnDeleteProfile").addEventListener("click", () => {
+      if(!window.confirm("Apagar diário, lista, favoritos e dados de perfil desta conta? Essa ação não pode ser desfeita.")) return;
+      wipeMyData();
+    });
+
+    document.getElementById("btnSwitchProfile").addEventListener("click", () => {
+      closeProfilePanel();
+      signOutUser();
+    });
+  }
+
+  /* ================= TMDB ================= */
+  async function tmdb(path, params){
+    if(!hasToken) throw new Error("no-token");
+    const url = new URL(API + path);
+    Object.entries(params || {}).forEach(([k,v]) => url.searchParams.set(k, v));
+    const res = await fetch(url, {
+      headers:{
+        "Authorization": "Bearer " + TMDB_TOKEN,
+        "Content-Type": "application/json;charset=utf-8"
+      }
+    });
+    if(!res.ok) throw new Error("tmdb-error-" + res.status);
+    return res.json();
+  }
+
+  /* ================= HELPERS DE ÍCONES / POSTER ================= */
+  function starSVG(filled){
+    return '<svg class="star-icon' + (filled ? ' filled' : '') + '" viewBox="0 0 24 24"><polygon points="12 2 15 9 22 9.5 16.5 14.5 18 22 12 18 6 22 7.5 14.5 2 9.5 9 9"/></svg>';
+  }
+  function starsInline(rating){
+    let out = ''; for(let i=1;i<=5;i++) out += starSVG(i <= rating); return out;
+  }
+  function heartSVG(filled){
+    return '<svg class="heart-icon' + (filled ? ' filled' : '') + '" viewBox="0 0 24 24"><path d="M12 20.5s-7.2-4.4-9.6-9.1C0.9 7.9 3 4.5 6.5 4.5c2 0 3.7 1.1 5.5 3.2 1.8-2.1 3.5-3.2 5.5-3.2 3.5 0 5.6 3.4 4.1 6.9C19.2 16.1 12 20.5 12 20.5z"/></svg>';
+  }
+  function isFavorite(id){ return state.favorites.some(f => f.id === id); }
+  function toggleFavorite(movie){
+    if(isFavorite(movie.id)){
+      state.favorites = state.favorites.filter(f => f.id !== movie.id);
+    }else{
+      state.favorites.push({ id: movie.id, title: movie.title, poster_path: movie.poster_path, year: movie.year || (movie.release_date || "").slice(0,4) });
+    }
+    saveState();
+  }
+  function favBtnHTML(movie){
+    return '<button class="fav-btn" data-fav="' + movie.id + '">' + heartSVG(isFavorite(movie.id)) + '</button>';
+  }
+  function fmtDate(d){
+    if(!d) return "";
+    const [y,m,day] = d.split("-");
+    return day + "." + m + "." + y;
+  }
+
+  function fmtMoney(n){
+    if(!n) return null;
+    return "US$ " + n.toLocaleString("pt-BR");
+  }
+
+  const ADAPT_MAP = {
+    "based on novel": "Baseado em romance",
+    "based on novel or book": "Baseado em livro",
+    "based on book": "Baseado em livro",
+    "based on young adult novel": "Baseado em livro juvenil",
+    "based on comic": "Baseado em quadrinhos",
+    "based on comic book": "Baseado em quadrinhos",
+    "based on graphic novel": "Baseado em graphic novel",
+    "based on true story": "Baseado em fatos reais",
+    "based on a true story": "Baseado em fatos reais",
+    "based on video game": "Baseado em jogo eletrônico",
+    "based on play": "Baseado em peça de teatro",
+    "based on short story": "Baseado em conto",
+    "based on fairy tale": "Baseado em conto de fadas",
+    "based on musical": "Baseado em musical",
+    "remake": "Refilmagem",
+    "sequel": "Sequência",
+    "prequel": "Prequela"
+  };
+
+  function adaptationTags(keywords){
+    if(!keywords || !keywords.length) return [];
+    const found = [];
+    keywords.forEach(k => {
+      const name = (k.name || "").toLowerCase();
+      Object.keys(ADAPT_MAP).forEach(key => {
+        if(name.indexOf(key) !== -1 && found.indexOf(ADAPT_MAP[key]) === -1) found.push(ADAPT_MAP[key]);
+      });
+    });
+    return found;
+  }
+
+  /* busca um resumo real da obra/página do filme na Wikipédia (API pública, sem chave) */
+  async function fetchWikiReference(title, year){
+    try{
+      const searchUrl = "https://pt.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srlimit=1&srsearch=" +
+        encodeURIComponent(title + " " + (year || "") + " filme");
+      const searchRes = await fetch(searchUrl).then(r => r.json());
+      const hit = searchRes.query && searchRes.query.search && searchRes.query.search[0];
+      if(!hit) return null;
+      const summaryUrl = "https://pt.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(hit.title.replace(/ /g, "_"));
+      const summary = await fetch(summaryUrl).then(r => r.json());
+      if(!summary || summary.type === "disambiguation" || !summary.extract) return null;
+      return {
+        title: summary.title,
+        extract: summary.extract,
+        url: summary.content_urls && summary.content_urls.desktop ? summary.content_urls.desktop.page : null
+      };
+    }catch(e){
+      return null;
+    }
+  }
+
+  function posterSrc(movie){
+    const ov = state.posterOverrides[movie.id];
+    if(ov) return ov.indexOf("http") === 0 ? ov : (IMG + ov);
+    if(movie.poster_path) return IMG + movie.poster_path;
+    return null;
+  }
+  function posterHTML(movie, cls){
+    const src = posterSrc(movie);
+    if(src) return '<img src="' + src + '" alt="' + (movie.title||"").replace(/"/g,'') + '">';
+    return '<div class="' + cls + '">' + (movie.title||"") + '</div>';
+  }
+  function setPosterOverride(id, value){
+    if(value) state.posterOverrides[id] = value; else delete state.posterOverrides[id];
+    saveState();
+  }
+
+  /* ================= NAVEGAÇÃO ================= */
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => switchView(btn.dataset.view));
+  });
+
+  function switchView(view){
+    state.activeView = view;
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    document.getElementById("view-" + view).classList.add("active");
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+    if(view === "diary") renderDiary();
+    if(view === "watchlist"){ renderFavorites(); renderWatchlist(); }
+    if(view === "search" && !state.trending) loadTrending();
+  }
+
+  /* ================= DIÁRIO ================= */
+  function stubCardHTML(m){
+    return '<div class="stub glass" data-id="' + m.id + '">' +
+      '<div class="poster">' + posterHTML(m, 'no-img') + '</div>' +
+      '<div class="seam"></div>' +
+      '<div class="info">' +
+        '<div class="title">' + m.title + '</div>' +
+        (m.year ? '<div class="meta">' + m.year + '</div>' : '') +
+        '<div class="stars">' + starsInline(m.rating) + '</div>' +
+        (m.comment ? '<div class="comment">"' + m.comment + '"</div>' : '') +
+      '</div>' +
+      '<button class="remove" data-remove="' + m.id + '">×</button>' +
+    '</div>';
+  }
+
+  function fmtDiaryHeader(d){
+    if(!d) return "Sem data";
+    const parts = d.split("-");
+    if(parts.length !== 3) return d;
+    const dateObj = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+    try{
+      const s = dateObj.toLocaleDateString("pt-BR", { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }catch(e){ return fmtDate(d); }
+  }
+
+  const diarySearchInput = document.getElementById("diarySearchInput");
+  diarySearchInput.addEventListener("input", () => renderDiary());
+
+  function renderDiary(){
+    const el = document.getElementById("diaryList");
+    if(state.watched.length === 0){
+      el.innerHTML = '<div class="empty glass"><div class="glyph">✽</div><p>Nenhum carimbo no seu diário ainda. Busque um filme e marque como assistido.</p></div>';
+      return;
+    }
+    const query = (diarySearchInput.value || "").trim().toLowerCase();
+    let list = state.watched;
+    if(query){
+      list = list.filter(m => (m.title||"").toLowerCase().indexOf(query) !== -1 || (m.comment||"").toLowerCase().indexOf(query) !== -1);
+    }
+    if(list.length === 0){
+      el.innerHTML = '<div class="empty glass"><p>Nenhum filme encontrado para "' + query + '" no seu diário.</p></div>';
+      return;
+    }
+
+    const sorted = [...list].sort((a,b) => (b.watchedDate || "").localeCompare(a.watchedDate || ""));
+    const groups = [];
+    let lastDate = null, currentGroup = null;
+    sorted.forEach(m => {
+      const d = m.watchedDate || "";
+      if(d !== lastDate){ currentGroup = { date: d, items: [] }; groups.push(currentGroup); lastDate = d; }
+      currentGroup.items.push(m);
+    });
+
+    el.innerHTML = groups.map(g =>
+      '<div class="diary-date-header">' + fmtDiaryHeader(g.date) + '</div>' + g.items.map(stubCardHTML).join("")
+    ).join("");
+
+    el.querySelectorAll(".stub").forEach(card => {
+      card.addEventListener("click", (e) => {
+        if(e.target.closest(".remove")) return;
+        const m = state.watched.find(x => x.id == card.dataset.id);
+        openModal(m, "watched");
+      });
+    });
+    el.querySelectorAll("[data-remove]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        state.watched = state.watched.filter(x => x.id != btn.dataset.remove);
+        saveState();
+        renderDiary();
+      });
+    });
+  }
+
+  /* ================= BUSCA ================= */
+  const searchInput = document.getElementById("searchInput");
+  searchInput.addEventListener("input", () => {
+    clearTimeout(state.searchTimer);
+    const q = searchInput.value.trim();
+    const el = document.getElementById("searchResults");
+    if(!q){
+      el.innerHTML = "";
+      document.getElementById("trendingSection").style.display = state.trending && state.trending.length ? "block" : "none";
+      return;
+    }
+    state.searchTimer = setTimeout(() => runSearch(q), 380);
+  });
+
+  async function runSearch(q){
+    const el = document.getElementById("searchResults");
+    if(!hasToken){
+      el.innerHTML = '<div class="empty glass"><p>Configure seu token da TMDB no arquivo para poder buscar filmes.</p></div>';
+      return;
+    }
+    document.getElementById("trendingSection").style.display = "none";
+    el.innerHTML = '<div class="empty glass"><p>Buscando…</p></div>';
+    try{
+      const data = await tmdb("/search/movie", { query: q, include_adult: "false", language: "pt-BR", page: 1 });
+      const results = (data.results || []).filter(r => r.poster_path || r.title);
+      if(results.length === 0){
+        el.innerHTML = '<div class="empty glass"><p>Nenhum filme encontrado para "' + q + '".</p></div>';
+        return;
+      }
+      el.innerHTML = '<div class="poster-grid">' + results.map(r => {
+        const watched = state.watched.some(w => w.id === r.id);
+        return '<div class="poster-card glass" data-id="' + r.id + '">' +
+          favBtnHTML(r) +
+          posterHTML(r, 'no-img') +
+          (watched ? '<div class="badge"></div>' : '') +
+        '</div>';
+      }).join("") + '</div>';
+      wireResultCards(el, results);
+    }catch(err){
+      el.innerHTML = '<div class="empty glass"><p>Erro ao buscar. Verifique seu token da TMDB.</p></div>';
+    }
+  }
+
+  function wireResultCards(container, results){
+    container.querySelectorAll(".poster-card").forEach(card => {
+      card.addEventListener("click", (e) => {
+        if(e.target.closest(".fav-btn")) return;
+        const r = results.find(x => x.id == card.dataset.id);
+        openModalFromSearch(r);
+      });
+    });
+    container.querySelectorAll("[data-fav]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const r = results.find(x => x.id == btn.dataset.fav);
+        toggleFavorite({ id: r.id, title: r.title, poster_path: r.poster_path, release_date: r.release_date });
+        btn.innerHTML = heartSVG(isFavorite(r.id));
+      });
+    });
+  }
+
+  /* ================= EM ALTA ================= */
+  async function loadTrending(){
+    const rail = document.getElementById("trendingRail");
+    const section = document.getElementById("trendingSection");
+    if(!hasToken){ section.style.display = "none"; return; }
+    section.style.display = "block";
+    rail.innerHTML = '<div class="empty glass" style="padding:24px 14px"><p>Carregando…</p></div>';
+    try{
+      const data = await tmdb("/trending/movie/week", { language: "pt-BR" });
+      state.trending = data.results || [];
+      renderTrending();
+    }catch(e){
+      section.style.display = "none";
+    }
+  }
+
+  function renderTrending(){
+    const rail = document.getElementById("trendingRail");
+    if(!state.trending || state.trending.length === 0){
+      document.getElementById("trendingSection").style.display = "none";
+      return;
+    }
+    rail.innerHTML = state.trending.map(r => {
+      const watched = state.watched.some(w => w.id === r.id);
+      return '<div class="poster-card glass" data-id="' + r.id + '">' +
+        favBtnHTML(r) +
+        posterHTML(r, 'no-img') +
+        (watched ? '<div class="badge"></div>' : '') +
+        '<div class="title-cap">' + r.title + '</div>' +
+      '</div>';
+    }).join("");
+    wireResultCards(rail, state.trending);
+  }
+
+  /* ================= FAVORITOS ================= */
+  function renderFavorites(){
+    const el = document.getElementById("favoritesGrid");
+    if(state.favorites.length === 0){
+      el.innerHTML = '<div class="empty glass" style="grid-column:1/-1; padding:32px 14px"><p>Nenhum favorito ainda. Toque no coração de um filme para guardá-lo aqui.</p></div>';
+      return;
+    }
+    el.innerHTML = state.favorites.map(m => {
+      return '<div class="poster-card glass" data-id="' + m.id + '">' + favBtnHTML(m) + posterHTML(m, 'no-img') + '</div>';
+    }).join("");
+    el.querySelectorAll(".poster-card").forEach(card => {
+      card.addEventListener("click", (e) => {
+        if(e.target.closest(".fav-btn")) return;
+        const m = state.favorites.find(x => x.id == card.dataset.id);
+        openModal(m, "fav");
+      });
+    });
+    el.querySelectorAll("[data-fav]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const m = state.favorites.find(x => x.id == btn.dataset.fav);
+        toggleFavorite(m);
+        renderFavorites();
+      });
+    });
+  }
+
+  /* ================= LISTA (QUERO ASSISTIR) ================= */
+  function renderWatchlist(){
+    const el = document.getElementById("watchlistGrid");
+    if(state.watchlist.length === 0){
+      el.innerHTML = '<div class="empty glass" style="grid-column:1/-1"><div class="glyph">✽</div><p>Sua lista está vazia. Adicione filmes que você quer assistir.</p></div>';
+      return;
+    }
+    el.innerHTML = state.watchlist.map(m => {
+      return '<div class="poster-card glass wl-card" data-id="' + m.id + '">' + posterHTML(m, 'no-img') + '<div class="quick">Marcar visto</div></div>';
+    }).join("");
+    el.querySelectorAll(".wl-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const m = state.watchlist.find(x => x.id == card.dataset.id);
+        openModal(m, "watchlist");
+      });
+    });
+  }
+
+  /* ================= MODAL ================= */
+  async function openModalFromSearch(basic){
+    const already = state.watched.find(w => w.id === basic.id) || state.watchlist.find(w => w.id === basic.id) || state.favorites.find(w => w.id === basic.id);
+    if(already){
+      const mode = state.watched.find(w=>w.id===basic.id) ? "watched" : (state.watchlist.find(w=>w.id===basic.id) ? "watchlist" : "fav");
+      openModal(already, mode); return;
+    }
+    openModal({
+      id: basic.id, title: basic.title, poster_path: basic.poster_path,
+      year: (basic.release_date || "").slice(0,4), overview: basic.overview,
+      rating: 0, watchedDate: new Date().toISOString().slice(0,10)
+    }, "new");
+  }
+
+  async function openModal(movie, mode){
+    state.activeMovie = { ...movie, mode };
+    if(hasToken){
+      try{
+        const [full, images] = await Promise.all([
+          tmdb("/movie/" + movie.id, { language: "pt-BR", append_to_response: "credits,keywords,external_ids" }),
+          tmdb("/movie/" + movie.id + "/images", { include_image_language: "null,en,pt" })
+        ]);
+        if(full){
+          state.activeMovie.overview = full.overview || movie.overview;
+          const crew = (full.credits && full.credits.crew) || [];
+          const director = crew.find(c => c.job === "Director");
+          const writer = crew.find(c => ["Screenplay","Writer","Story"].indexOf(c.job) !== -1);
+          state.activeMovie.director = director ? director.name : "";
+          state.activeMovie.directorId = director ? director.id : null;
+          state.activeMovie.writer = writer ? writer.name : "";
+          state.activeMovie.writerId = writer ? writer.id : null;
+          state.activeMovie.year = (full.release_date || "").slice(0,4);
+          state.activeMovie.runtime = full.runtime;
+          state.activeMovie.cast = ((full.credits && full.credits.cast) || []).slice(0, 10);
+          state.activeMovie.genres = (full.genres || []).map(g => g.name);
+          state.activeMovie.budget = full.budget;
+          state.activeMovie.revenue = full.revenue;
+          state.activeMovie.collection = full.belongs_to_collection ? full.belongs_to_collection.name : null;
+          state.activeMovie.collectionId = full.belongs_to_collection ? full.belongs_to_collection.id : null;
+          state.activeMovie.productionCompanies = (full.production_companies || []).map(c => c.name);
+          state.activeMovie.productionCountries = (full.production_countries || []).map(c => c.name);
+          state.activeMovie.imdbId = full.external_ids ? full.external_ids.imdb_id : null;
+          state.activeMovie.adaptTags = adaptationTags(full.keywords && full.keywords.keywords);
+        }
+        state.activeMovie.altPosters = (images.posters || []).slice(0, 8);
+      }catch(e){}
+    }
+    renderModal();
+    document.getElementById("modalOverlay").classList.add("show");
+
+    const askedId = movie.id;
+
+    if(hasToken){
+      tmdb("/movie/" + movie.id + "/recommendations", { language: "pt-BR" }).then(rec => {
+        if(state.activeMovie && state.activeMovie.id === askedId){
+          state.activeMovie.recommendations = (rec.results || []).filter(r => r.poster_path).slice(0, 10);
+          renderModal();
+        }
+      }).catch(() => {});
+
+      if(state.activeMovie.collectionId){
+        tmdb("/collection/" + state.activeMovie.collectionId, { language: "pt-BR" }).then(coll => {
+          if(state.activeMovie && state.activeMovie.id === askedId){
+            state.activeMovie.collectionParts = (coll.parts || [])
+              .filter(p => p.poster_path)
+              .sort((a,b) => (a.release_date || "").localeCompare(b.release_date || ""));
+            renderModal();
+          }
+        }).catch(() => {});
+      }
+    }
+
+    if(state.activeMovie.adaptTags && state.activeMovie.adaptTags.length){
+      fetchWikiReference(movie.title, state.activeMovie.year).then(ref => {
+        if(ref && state.activeMovie && state.activeMovie.id === askedId){
+          state.activeMovie.wikiRef = ref;
+          renderModal();
+        }
+      });
+    }
+  }
+
+  function closeModal(){
+    document.getElementById("modalOverlay").classList.remove("show");
+    state.activeMovie = null;
+  }
+  document.getElementById("modalOverlay").addEventListener("click", (e) => {
+    if(e.target.id === "modalOverlay") closeModal();
+  });
+
+  /* ================= PERFIL DE DIRETOR / ATOR ================= */
+  document.getElementById("personOverlay").addEventListener("click", (e) => {
+    if(e.target.id === "personOverlay") closePersonModal();
+  });
+  function closePersonModal(){
+    document.getElementById("personOverlay").classList.remove("show");
+  }
+
+  async function openPerson(personId){
+    if(!hasToken) return;
+    const el = document.getElementById("personContent");
+    el.innerHTML = '<div class="handle"></div><div class="empty" style="padding:60px 14px"><p>Carregando…</p></div>';
+    document.getElementById("personOverlay").classList.add("show");
+    try{
+      const full = await tmdb("/person/" + personId, { language: "pt-BR", append_to_response: "combined_credits" });
+      let bio = full.biography;
+      let bioLangNote = "";
+      if(!bio){
+        try{
+          const en = await tmdb("/person/" + personId, { language: "en-US" });
+          if(en.biography){ bio = en.biography; bioLangNote = "Biografia disponível apenas em inglês."; }
+        }catch(e){}
+      }
+      const raw = [
+        ...((full.combined_credits && full.combined_credits.cast) || []),
+        ...((full.combined_credits && full.combined_credits.crew) || [])
+      ];
+      const seen = new Set();
+      const filmography = raw.filter(c => {
+        if(!c.poster_path) return false;
+        const key = c.media_type + "-" + c.id;
+        if(seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).sort((a,b) => {
+        const da = a.release_date || a.first_air_date || "";
+        const db = b.release_date || b.first_air_date || "";
+        return db.localeCompare(da);
+      }).slice(0, 16);
+
+      renderPersonModal(full, bio, bioLangNote, filmography);
+    }catch(e){
+      el.innerHTML = '<div class="handle"></div><div class="empty" style="padding:60px 14px"><p>Não foi possível carregar esse perfil.</p></div>';
+    }
+  }
+
+  function renderPersonModal(p, bio, bioLangNote, filmography){
+    const el = document.getElementById("personContent");
+    el.innerHTML =
+      '<div class="handle"></div>' +
+      '<div class="person-hero">' +
+        '<button class="close" id="personClose">×</button>' +
+        (p.profile_path ? '<img src="' + PROFILE_IMG + p.profile_path + '">' : '<div class="no-photo">' + (p.name||"?").charAt(0) + '</div>') +
+        '<div>' +
+          '<div class="p-name">' + p.name + '</div>' +
+          '<div class="p-meta">' +
+            (p.known_for_department ? p.known_for_department + '<br>' : '') +
+            (p.birthday ? fmtDate(p.birthday) + (p.deathday ? ' — ' + fmtDate(p.deathday) : '') + '<br>' : '') +
+            (p.place_of_birth || '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      (bio ? (
+        '<div class="overview glass bio-text">' + bio.slice(0, 640) + (bio.length > 640 ? '…' : '') +
+        (bioLangNote ? '<span class="bio-lang-note">' + bioLangNote + '</span>' : '') +
+        '</div>'
+      ) : '<div class="empty" style="padding:20px 20px"><p>Biografia não disponível.</p></div>') +
+      (filmography.length ? (
+        '<div class="block">' +
+          '<div class="block-label">Filmografia</div>' +
+          '<div class="poster-grid">' + filmography.map(f => {
+            const title = (f.title || f.name || "").replace(/"/g,'');
+            return '<div class="poster-card glass" data-fm-id="' + f.id + '" data-fm-type="' + f.media_type + '" data-fm-title="' + title + '" data-fm-poster="' + (f.poster_path||'') + '" data-fm-date="' + (f.release_date || f.first_air_date || '') + '">' +
+              '<img src="' + IMG + f.poster_path + '">' +
+              '<div class="title-cap">' + title + (f.media_type === 'tv' ? ' · série' : '') + '</div>' +
+            '</div>';
+          }).join("") + '</div>' +
+        '</div>'
+      ) : '');
+
+    document.getElementById("personClose").addEventListener("click", closePersonModal);
+    el.querySelectorAll("[data-fm-id]").forEach(card => {
+      card.addEventListener("click", () => {
+        if(card.dataset.fmType === "movie"){
+          closePersonModal();
+          openModalFromSearch({
+            id: parseInt(card.dataset.fmId, 10),
+            title: card.dataset.fmTitle,
+            poster_path: card.dataset.fmPoster || null,
+            release_date: card.dataset.fmDate
+          });
+        }else{
+          window.open("https://www.themoviedb.org/tv/" + card.dataset.fmId + "?language=pt-BR", "_blank", "noopener");
+        }
+      });
+    });
+  }
+
+  function renderModal(){
+    const m = state.activeMovie;
+    const isWatched = m.mode === "watched" || state.watched.some(w => w.id === m.id);
+    const el = document.getElementById("modalContent");
+    const override = state.posterOverrides[m.id];
+
+    el.innerHTML =
+      '<div class="handle"></div>' +
+      '<div class="hero">' +
+        '<button class="close" id="modalClose">×</button>' +
+        posterHTML(m, 'no-img') +
+        '<div class="h-info">' +
+          '<div class="h-title">' + m.title + '</div>' +
+          '<div class="h-meta">' +
+            (m.year ? m.year + '<br>' : '') +
+            (m.director ? m.director + '<br>' : '') +
+            (m.runtime ? m.runtime + ' min' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      (m.overview ? '<div class="overview glass">' + m.overview + '</div>' : '') +
+      (m.genres && m.genres.length ? (
+        '<div class="block">' +
+          '<div class="tag-row">' + m.genres.map(g => '<span class="tag">' + g + '</span>').join("") + '</div>' +
+        '</div>'
+      ) : '') +
+      (m.adaptTags && m.adaptTags.length ? (
+        '<div class="block">' +
+          '<div class="block-label">Baseado em</div>' +
+          '<div class="tag-row">' + m.adaptTags.map(t => '<span class="tag adapt">' + t + '</span>').join("") + '</div>' +
+          (m.wikiRef ? (
+            '<div class="wiki-ref" style="margin-top:12px">' +
+              m.wikiRef.extract.slice(0, 320) + (m.wikiRef.extract.length > 320 ? '…' : '') +
+              '<span class="src">Fonte: Wikipédia</span>' +
+            '</div>' +
+            (m.wikiRef.url ? '<div class="btn-row" style="margin-top:10px"><a class="btn ghost" style="width:100%" target="_blank" rel="noopener" href="' + m.wikiRef.url + '">Ler mais na Wikipédia</a></div>' : '')
+          ) : '<div class="wiki-ref" style="margin-top:12px; color:var(--text-faint)">Buscando referência…</div>') +
+        '</div>'
+      ) : '') +
+      (m.cast && m.cast.length ? (
+        '<div class="block">' +
+          '<div class="block-label">Elenco</div>' +
+          '<div class="cast-rail">' + m.cast.map(c =>
+            '<div class="cast-card" data-person="' + c.id + '">' +
+              (c.profile_path ? '<img src="' + PROFILE_IMG + c.profile_path + '">' : '<div class="no-photo">' + (c.name||'?').charAt(0) + '</div>') +
+              '<div class="name">' + c.name + '</div>' +
+              (c.character ? '<div class="character">' + c.character + '</div>' : '') +
+            '</div>'
+          ).join("") + '</div>' +
+        '</div>'
+      ) : '') +
+      '<div class="block">' +
+        '<div class="block-label">Ficha técnica</div>' +
+        (m.director ? '<div class="info-row"><span class="k">Direção</span><span class="v"><button class="person-link" data-person="' + m.directorId + '">' + m.director + '</button></span></div>' : '') +
+        (m.writer ? '<div class="info-row"><span class="k">Roteiro</span><span class="v"><button class="person-link" data-person="' + m.writerId + '">' + m.writer + '</button></span></div>' : '') +
+        (m.runtime ? '<div class="info-row"><span class="k">Duração</span><span class="v">' + m.runtime + ' min</span></div>' : '') +
+        (m.budget ? '<div class="info-row"><span class="k">Orçamento</span><span class="v">' + fmtMoney(m.budget) + '</span></div>' : '') +
+        (m.revenue ? '<div class="info-row"><span class="k">Bilheteria</span><span class="v">' + fmtMoney(m.revenue) + '</span></div>' : '') +
+        (m.productionCompanies && m.productionCompanies.length ? '<div class="info-row"><span class="k">Produtora</span><span class="v">' + m.productionCompanies.slice(0,2).join(", ") + '</span></div>' : '') +
+        (m.productionCountries && m.productionCountries.length ? '<div class="info-row"><span class="k">País</span><span class="v">' + m.productionCountries.join(", ") + '</span></div>' : '') +
+        (m.collection ? '<div class="info-row"><span class="k">Coleção</span><span class="v">' + m.collection + '</span></div>' : '') +
+        (m.imdbId ? '<div class="btn-row" style="margin-top:14px"><a class="btn ghost" style="width:100%" target="_blank" rel="noopener" href="https://www.imdb.com/title/' + m.imdbId + '/">Ver no IMDb</a></div><div class="imdb-note">A TMDB não fornece dados de premiações e indicações — para ver prêmios (Oscar, Globo de Ouro etc.), consulte o IMDb pelo link acima.</div>' : '') +
+      '</div>' +
+      (m.collectionParts && m.collectionParts.length > 1 ? (
+        '<div class="block">' +
+          '<div class="block-label">' + (m.collection || 'Coleção') + '</div>' +
+          '<div class="trending-rail">' + m.collectionParts.map(p =>
+            '<div class="poster-card glass' + (p.id === m.id ? '' : '') + '" data-rec-id="' + p.id + '" data-rec-title="' + (p.title||'').replace(/"/g,'') + '" data-rec-poster="' + (p.poster_path||'') + '" data-rec-date="' + (p.release_date||'') + '">' +
+              '<img src="' + IMG + p.poster_path + '">' +
+              (p.id === m.id ? '<div class="badge"></div>' : '') +
+              '<div class="title-cap">' + (p.title||'') + (p.release_date ? ' (' + p.release_date.slice(0,4) + ')' : '') + '</div>' +
+            '</div>'
+          ).join("") + '</div>' +
+        '</div>'
+      ) : '') +
+      (m.recommendations && m.recommendations.length ? (
+        '<div class="block">' +
+          '<div class="block-label">Sugestões parecidas</div>' +
+          '<div class="trending-rail">' + m.recommendations.map(r =>
+            '<div class="poster-card glass" data-rec-id="' + r.id + '" data-rec-title="' + (r.title||'').replace(/"/g,'') + '" data-rec-poster="' + (r.poster_path||'') + '" data-rec-date="' + (r.release_date||'') + '">' +
+              '<img src="' + IMG + r.poster_path + '">' +
+              '<div class="title-cap">' + (r.title||'') + '</div>' +
+            '</div>'
+          ).join("") + '</div>' +
+        '</div>'
+      ) : '') +
+      '<div class="block">' +
+        '<div class="fav-toggle-row">' +
+          '<button id="btnFavToggle">' + heartSVG(isFavorite(m.id)) + '</button>' +
+          '<span class="fav-label">' + (isFavorite(m.id) ? 'Nos favoritos' : 'Adicionar aos favoritos') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Sua nota</div>' +
+        '<div class="rate-row" id="rateRow">' + [1,2,3,4,5].map(i =>
+          '<button data-star="' + i + '">' + starSVG(i <= (m.rating||0)) + '</button>'
+        ).join("") + '</div>' +
+        '<div class="block-label">Comentário</div>' +
+        '<textarea class="comment-input" id="commentInput" placeholder="O que você achou do filme?">' + (m.comment || '') + '</textarea>' +
+        '<div class="block-label">Data assistido</div>' +
+        '<div class="date-row">' +
+          '<input type="date" id="watchedDateInput" value="' + (m.watchedDate || new Date().toISOString().slice(0,10)) + '">' +
+        '</div>' +
+        '<div class="btn-row">' +
+          '<button class="btn primary" id="btnSaveWatched">' + (isWatched ? 'Atualizar' : 'Marcar visto') + '</button>' +
+          (isWatched ? '' : '<button class="btn ghost" id="btnAddWatchlist">+ Lista</button>') +
+        '</div>' +
+        (isWatched ? '<div class="btn-row"><button class="btn danger" id="btnRemove">Remover do diário</button></div>' : '') +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="block-label">Capa</div>' +
+        '<div class="cover-rail" id="coverRail">' +
+          (m.altPosters || []).map(p => '<button class="cover-thumb' + (override === p.file_path ? ' active' : '') + '" data-cover="' + p.file_path + '"><img src="' + IMG + p.file_path + '"></button>').join("") +
+        '</div>' +
+        '<div class="custom-cover-row">' +
+          '<input type="text" id="customCoverInput" class="auth-input" placeholder="ou cole o link de uma imagem">' +
+          '<button class="btn ghost" id="btnApplyCover">Aplicar</button>' +
+        '</div>' +
+        (override ? '<button class="btn ghost" id="btnResetCover" style="width:100%">Restaurar capa original</button>' : '') +
+      '</div>' +
+      (isWatched ? (
+        '<div class="block">' +
+          '<div class="block-label">Compartilhar</div>' +
+          '<div class="btn-row"><button class="btn primary" id="btnShareCard">Gerar cartão para compartilhar</button></div>' +
+          '<div id="shareResult"></div>' +
+        '</div>'
+      ) : '');
+
+    document.getElementById("modalClose").addEventListener("click", closeModal);
+
+    el.querySelectorAll("[data-person]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPerson(btn.dataset.person);
+      });
+    });
+
+    el.querySelectorAll("[data-rec-id]").forEach(card => {
+      card.addEventListener("click", () => {
+        openModalFromSearch({
+          id: parseInt(card.dataset.recId, 10),
+          title: card.dataset.recTitle,
+          poster_path: card.dataset.recPoster || null,
+          release_date: card.dataset.recDate
+        });
+      });
+    });
+
+    function keepDraft(){
+      const c = document.getElementById("commentInput");
+      if(c) state.activeMovie.comment = c.value;
+    }
+
+    document.getElementById("btnFavToggle").addEventListener("click", () => {
+      keepDraft();
+      toggleFavorite(m);
+      renderModal();
+    });
+
+    el.querySelectorAll("[data-star]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        keepDraft();
+        state.activeMovie.rating = parseInt(btn.dataset.star, 10);
+        renderModal();
+      });
+    });
+
+    document.getElementById("btnSaveWatched").addEventListener("click", () => {
+      const date = document.getElementById("watchedDateInput").value;
+      const comment = document.getElementById("commentInput").value.trim();
+      const entry = {
+        id: m.id, title: m.title, poster_path: m.poster_path, year: m.year,
+        rating: state.activeMovie.rating || 0, watchedDate: date, comment: comment
+      };
+      state.watched = state.watched.filter(x => x.id !== m.id);
+      state.watched.push(entry);
+      state.watchlist = state.watchlist.filter(x => x.id !== m.id);
+      saveState();
+      closeModal();
+      switchView("diary");
+    });
+
+    const addWlBtn = document.getElementById("btnAddWatchlist");
+    if(addWlBtn){
+      addWlBtn.addEventListener("click", () => {
+        if(!state.watchlist.some(x => x.id === m.id)){
+          state.watchlist.push({ id: m.id, title: m.title, poster_path: m.poster_path, year: m.year });
+        }
+        saveState();
+        closeModal();
+        switchView("watchlist");
+      });
+    }
+
+    const rmBtn = document.getElementById("btnRemove");
+    if(rmBtn){
+      rmBtn.addEventListener("click", () => {
+        state.watched = state.watched.filter(x => x.id !== m.id);
+        saveState();
+        closeModal();
+        renderDiary();
+      });
+    }
+
+    /* ---------- capa ---------- */
+    el.querySelectorAll("[data-cover]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        keepDraft();
+        setPosterOverride(m.id, btn.dataset.cover);
+        refreshLists();
+        renderModal();
+      });
+    });
+    document.getElementById("btnApplyCover").addEventListener("click", () => {
+      const val = document.getElementById("customCoverInput").value.trim();
+      if(!val || val.indexOf("http") !== 0) return;
+      keepDraft();
+      setPosterOverride(m.id, val);
+      refreshLists();
+      renderModal();
+    });
+    const resetCoverBtn = document.getElementById("btnResetCover");
+    if(resetCoverBtn){
+      resetCoverBtn.addEventListener("click", () => {
+        keepDraft();
+        setPosterOverride(m.id, null);
+        refreshLists();
+        renderModal();
+      });
+    }
+
+    /* ---------- compartilhar ---------- */
+    const shareBtn = document.getElementById("btnShareCard");
+    if(shareBtn){
+      shareBtn.addEventListener("click", () => handleShareCard(m));
+    }
+  }
+
+  function refreshLists(){
+    if(state.activeView === "diary") renderDiary();
+    if(state.activeView === "watchlist"){ renderFavorites(); renderWatchlist(); }
+  }
+
+  /* ================= COMPARTILHAR ================= */
+  function buildShareText(m){
+    const r = m.rating || (state.activeMovie ? state.activeMovie.rating : 0) || 0;
+    const stars = '★'.repeat(r) + '☆'.repeat(5 - r);
+    let t = m.title + (m.year ? ' (' + m.year + ')' : '') + '\n' + stars;
+    if(m.comment) t += '\n\n"' + m.comment + '"';
+    t += '\n\nRegistrado no meu diário STUB 🎬';
+    return t;
+  }
+
+  function loadImageForCanvas(src){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+  }
+
+  function wrapLines(ctx, text, maxWidth, maxLines){
+    const words = text.split(" ");
+    const lines = [];
+    let line = "";
+    for(const w of words){
+      const test = line ? line + " " + w : w;
+      if(ctx.measureText(test).width > maxWidth && line){
+        lines.push(line);
+        line = w;
+        if(lines.length === maxLines - 1){ break; }
+      }else{
+        line = test;
+      }
+    }
+    if(line) lines.push(line);
+    if(lines.length === maxLines && words.join(" ") !== lines.join(" ")){
+      lines[lines.length-1] = lines[lines.length-1].replace(/.{0,3}$/, "…");
+    }
+    return lines.slice(0, maxLines);
+  }
+
+  function drawStarsRow(ctx, cx, cy, rating){
+    const n = 5, size = 30, gap = 12;
+    const totalW = n*size + (n-1)*gap;
+    let x = cx - totalW/2;
+    for(let i=0;i<n;i++){
+      ctx.save();
+      ctx.translate(x + size/2, cy);
+      ctx.beginPath();
+      for(let k=0;k<5;k++){
+        const ang = -Math.PI/2 + k*(Math.PI*2/5);
+        const angIn = ang + Math.PI/5;
+        const rOuter = size/2, rInner = size/4.2;
+        const px = Math.cos(ang)*rOuter, py = Math.sin(ang)*rOuter;
+        const px2 = Math.cos(angIn)*rInner, py2 = Math.sin(angIn)*rInner;
+        if(k===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+        ctx.lineTo(px2,py2);
+      }
+      ctx.closePath();
+      ctx.fillStyle = (i < rating) ? "#E8A33D" : "rgba(255,255,255,0.18)";
+      ctx.fill();
+      ctx.restore();
+      x += size + gap;
+    }
+  }
+
+  async function buildShareCanvas(m){
+    const W = 900, H = 1250;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+
+    const bg = ctx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0, "#100e14"); bg.addColorStop(1, "#050506");
+    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+
+    function blob(x,y,r,color){
+      const g = ctx.createRadialGradient(x,y,0,x,y,r);
+      g.addColorStop(0,color); g.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 0.5;
+    blob(120,110,260,"#E8A33D");
+    blob(W-100,220,220,"#E0625F");
+    ctx.globalAlpha = 1;
+
+    const posterW = 460, posterH = 690, posterX = (W-posterW)/2, posterY = 90;
+    let posterImg = null;
+    const src = posterSrc(m);
+    if(src){ try{ posterImg = await loadImageForCanvas(src); }catch(e){ posterImg = null; } }
+
+    ctx.save();
+    roundRectPath(ctx, posterX, posterY, posterW, posterH, 22);
+    ctx.clip();
+    if(posterImg){
+      ctx.drawImage(posterImg, posterX, posterY, posterW, posterH);
+    }else{
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fillRect(posterX, posterY, posterW, posterH);
+    }
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.lineWidth = 2;
+    roundRectPath(ctx, posterX, posterY, posterW, posterH, 22);
+    ctx.stroke();
+
+    let y = posterY + posterH + 62;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#F6F4F1";
+    ctx.font = "700 42px 'Plus Jakarta Sans', sans-serif";
+    const titleLines = wrapLines(ctx, m.title, 760, 2);
+    titleLines.forEach(line => { ctx.fillText(line, W/2, y); y += 50; });
+
+    ctx.fillStyle = "rgba(246,244,241,0.55)";
+    ctx.font = "500 24px 'Plus Jakarta Sans', sans-serif";
+    if(m.year) ctx.fillText(m.year, W/2, y + 4);
+    y += 56;
+
+    drawStarsRow(ctx, W/2, y, state.activeMovie.rating || m.rating || 0);
+    y += 60;
+
+    if(m.comment){
+      ctx.fillStyle = "rgba(246,244,241,0.82)";
+      ctx.font = "italic 400 25px 'Plus Jakarta Sans', sans-serif";
+      const lines = wrapLines(ctx, '"' + m.comment + '"', 680, 3);
+      lines.forEach(line => { ctx.fillText(line, W/2, y); y += 34; });
+    }
+
+    ctx.fillStyle = "#E8A33D";
+    ctx.font = "800 26px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText("STUB", W/2, H - 44);
+
+    return canvas;
+  }
+
+  function canvasToBlob(canvas){
+    return new Promise(resolve => canvas.toBlob(b => resolve(b), "image/png"));
+  }
+
+  async function handleShareCard(m){
+    const resultEl = document.getElementById("shareResult");
+    if(!resultEl) return;
+    resultEl.innerHTML = '<div class="empty glass" style="padding:16px"><p>Gerando cartão…</p></div>';
+    try{ if(document.fonts && document.fonts.ready) await document.fonts.ready; }catch(e){}
+
+    const canvas = await buildShareCanvas(m);
+    let blob = null;
+    try{ blob = await canvasToBlob(canvas); }catch(e){ blob = null; }
+    const shareText = buildShareText(m);
+
+    let html = "";
+    if(blob){
+      const url = URL.createObjectURL(blob);
+      html += '<img src="' + url + '">';
+      html += '<div class="btn-row">';
+      html += '<a class="btn ghost" href="' + url + '" download="stub-' + m.id + '.png">Baixar imagem</a>';
+      if(navigator.share) html += '<button class="btn primary" id="btnNativeShare">Compartilhar</button>';
+      html += '</div>';
+    }else{
+      html += '<div class="empty glass" style="padding:14px"><p>Não foi possível gerar a imagem para essa capa (link externo sem permissão de uso). Você ainda pode compartilhar o texto abaixo.</p></div>';
+    }
+    html += '<div class="btn-row">';
+    html += '<a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(shareText) + '">WhatsApp</a>';
+    html += '<a class="btn ghost" target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText) + '">X</a>';
+    html += '</div>';
+    html += '<button class="btn ghost" id="btnCopyText" style="width:100%">Copiar texto</button>';
+    resultEl.innerHTML = html;
+
+    const nativeBtn = document.getElementById("btnNativeShare");
+    if(nativeBtn && blob){
+      nativeBtn.addEventListener("click", async () => {
+        try{
+          const file = new File([blob], "stub-" + m.id + ".png", { type: "image/png" });
+          if(navigator.canShare && navigator.canShare({ files: [file] })){
+            await navigator.share({ files: [file], title: m.title, text: shareText });
+          }else{
+            await navigator.share({ title: m.title, text: shareText });
+          }
+        }catch(e){ /* cancelado pelo usuário */ }
+      });
+    }
+    const copyBtn = document.getElementById("btnCopyText");
+    copyBtn.addEventListener("click", async () => {
+      try{
+        await navigator.clipboard.writeText(shareText);
+        copyBtn.textContent = "Copiado!";
+        setTimeout(() => { copyBtn.textContent = "Copiar texto"; }, 1500);
+      }catch(e){}
+    });
+  }
+
+  /* ---------- inicialização: sessão existente + link de redefinição de senha por e-mail ---------- */
+  (async function boot(){
+    if(!hasSupabase){ renderAuth(); return; }
+
+    // o Supabase manda a pessoa de volta com #access_token=...&type=recovery no link do e-mail
+    if(window.location.hash.indexOf("type=recovery") !== -1){
+      authMode = "recovery";
+      renderAuth();
+      return;
+    }
+
+    const { data } = await sb.auth.getSession();
+    if(data && data.session){
+      await handleSignedIn(data.session);
+    }else{
+      renderAuth();
+    }
+
+    sb.auth.onAuthStateChange((event) => {
+      if(event === "SIGNED_OUT" && session){
+        session = null;
+        document.getElementById("app").classList.remove("show");
+        document.getElementById("authScreen").classList.remove("hide");
+        authMode = "signin"; authError = "";
+        renderAuth();
+      }
+    });
+  })();
+})();
+</script>
+</body>
+</html>
