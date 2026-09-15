@@ -1214,7 +1214,7 @@
   function refreshAvatarUI(){
     const btn = document.getElementById("topbarAvatar");
     if(state.profile && state.profile.avatar){
-      btn.innerHTML = '<img src="' + state.profile.avatar + '" style="height:100%;border-radius:50%;object-fit:cover">';
+      btn.innerHTML = '<img src="' + state.profile.avatar + '" style="height:100%;width:100%;border-radius:50%;object-fit:cover">';
     }else{
       btn.textContent = displayName().charAt(0).toUpperCase();
     }
