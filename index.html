@@ -677,15 +677,16 @@
     .profile-topline{ display:contents; }
     .profile-avatar-ring{ order:1; align-self:center; margin-top:-48px; }
     .profile-identity-text{ order:2; text-align:center; align-self:center; max-width:100%; }
-    .profile-stats-row{ order:3; justify-content:center; }
-    .profile-badges-row{ order:4; justify-content:center; }
+    .profile-stats-row{ order:3; justify-content:center !important; }
+    .profile-badges-row{ order:4; justify-content:center !important; }
     .profile-actions{ order:5; justify-content:center; flex-wrap:wrap; margin-top:18px; }
 
     .profile-name-line{ justify-content:center; }
     .profile-stats-row{ gap:20px; }
     /* Editar perfil + Editar badges lado a lado; Sair ocupa a linha inteira */
-    .profile-actions .btn{ flex:1; min-width:120px; }
+    .profile-actions .btn{ flex:1 !important; min-width:120px; }
     .profile-actions .btn.danger{ flex:0 0 100%; max-width:200px; margin:4px auto 0; }
+    .tabbar .pill{ justify-content:center !important; }
   }
 
   .profile-stats-row{ display:flex; justify-content:flex-start; gap:24px; flex-wrap:wrap; margin-top:16px; }
@@ -1292,6 +1293,7 @@
       gap:2px;
       overflow-x:auto;
       scrollbar-width:none;
+      justify-content:center;
     }
     .tabbar .pill::-webkit-scrollbar{ display:none; }
     .tabbar button{
