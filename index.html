@@ -1247,7 +1247,7 @@
   .btn.ghost{ color:var(--text-dim); background:transparent; }
   .btn.danger{ border-color:rgba(224,98,95,0.5); color:var(--danger); background:rgba(224,98,95,0.08); }
 
-  .star-icon{ stroke:var(--text-dim); fill:none; stroke-width:1.6; }
+  .star-icon{ stroke:var(--text-dim); fill:none; stroke-width:1.6; width:15px; }
   .star-icon.filled{ fill:var(--accent); stroke:var(--accent); }
 
   .heart-icon{ stroke:var(--text-dim); fill:none; stroke-width:1.8; }
@@ -2271,7 +2271,7 @@
 
     let html = '<div class="block-label">Comunidade STUB</div>';
     html += count
-      ? '<div class="t-stars" style="margin-bottom:4px">' + starsInline(Math.round(avg)) + ' <span class="node-meta" style="display:inline">' + avg.toFixed(1) + ' · ' + count + ' avaliaç' + (count===1?'ão':'ões') + ' no STUB</span></div>'
+      ? '<div class="t-stars" style="margin-bottom:4px; width:100%;display:flex;gap:10px;">' + starsInline(Math.round(avg)) + ' <span class="node-meta" style="display:inline; font-size:14px">' + avg.toFixed(1) + ' · ' + count + ' avaliaç' + (count===1?'ão':'ões') + ' no STUB</span></div>'
       : '<div class="imdb-note">Ninguém do STUB avaliou ainda — seja o primeiro!</div>';
 
     if(friendRatings.length){
