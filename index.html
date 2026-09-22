@@ -7,7 +7,7 @@
      Mude para true para mandar todo mundo para a página de manutenção (404.html).
      Pra você conseguir usar o site mesmo em manutenção, abra com ?preview=1 no fim do endereço.
      A página de manutenção confere a cada 30 s e traz as pessoas de volta quando isso voltar a false. */
-  window.STUB_MAINTENANCE = true;
+  window.STUB_MAINTENANCE = false;
   if(window.STUB_MAINTENANCE && !/[?&]preview=1/.test(location.search)) location.replace("404.html?m=1");
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
