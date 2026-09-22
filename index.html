@@ -1949,7 +1949,7 @@
     transition:opacity .2s ease, transform .2s ease;
   }
   #btnBackToTop.show{ opacity:1; pointer-events:auto; transform:translateY(0); }
-  @media (min-width: 860px){ #btnBackToTop{ bottom:24px; }, .ld-hero-ctas{ margin: 0 10px; } }
+  @media (min-width: 860px){ #btnBackToTop{ bottom:24px; }}
 
   .toast{
     display:flex; align-items:center; gap:10px;
@@ -1993,6 +1993,7 @@
   .ld-hero .ld-sub{ margin:18px auto 28px; max-width:460px; font-size:16px; }
   .ld-hero-ctas{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin: 0 30%; }
   .ld-hero-ctas .btn{ padding:14px 26px; font-size:13.5px; }
+  @media (min-width: 860px){ .ld-hero-ctas{ margin: 0 10px; } }
 
   /* benefícios */
   .ld-benefits-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-top:32px; }
@@ -2005,7 +2006,7 @@
   /* entrada suave das seções ao rolar */
   .ld-reveal{ opacity:0; transform:translateY(18px); transition:opacity .6s ease, transform .6s ease; }
   .ld-reveal.in{ opacity:1; transform:translateY(0); }
-  @media (prefers-reduced-motion: reduce){ .ld-reveal{ opacity:1; transform:none; transition:none; }, .ld-hero-ctas{ margin: none !important; } }
+  @media (prefers-reduced-motion: reduce){ .ld-reveal{ opacity:1; transform:none; transition:none; } }
 
   /* login/cadastro agora é um modal sobre a landing, não a tela inicial */
   #authScreen{
