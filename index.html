@@ -2056,6 +2056,33 @@
     background:var(--fill-1); color:var(--text); font-family:var(--font-body); font-size:13px; font-weight:600;
   }
 
+  /* ==================== editar perfil ==================== */
+  .edit-head{ position:relative; display:flex; gap:14px; align-items:flex-start; padding:18px 20px 12px; }
+  .edit-head .avatar-big{ width:72px; height:72px; flex:0 0 72px; }
+  .edit-head-info{ flex:1; min-width:0; }
+  .edit-title{ font-family:var(--font-display); font-size:20px; font-weight:700; letter-spacing:-0.022em; }
+  .edit-sub{ font-size:13px; color:var(--text-dim); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .edit-photo-actions{ display:flex; gap:8px; margin-top:10px; }
+  .edit-photo-actions .btn{ flex:0 1 auto; min-height:36px; padding:8px 14px; font-size:14px; background:var(--fill-1); color:var(--text); font-weight:600; }
+  .link-btn{
+    background:none; border:none; padding:6px 0 0; cursor:pointer;
+    color:var(--accent); font-family:var(--font-body); font-size:13.5px; font-weight:500; text-align:left;
+  }
+  .field{ margin-bottom:14px; }
+  .field > label{ display:block; font-size:13px; color:var(--text-dim); margin-bottom:5px; }
+  .field .auth-input, .field .comment-input{ margin-bottom:0; }
+  .field-row{ display:flex; gap:10px; }
+  .field-row .field{ flex:1; min-width:0; }
+  .hint{ font-size:13px; color:var(--text-dim); line-height:1.45; margin-top:10px; }
+  .row-btn{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;
+    min-height:48px; padding:12px 14px; margin-bottom:8px;
+    background:var(--fill-2); border:none; border-radius:var(--r-md); cursor:pointer;
+    color:var(--text); font-family:var(--font-body); font-size:15px; font-weight:500; text-align:left;
+  }
+  .row-btn .mi{ color:var(--text-faint); }
+  .row-btn:active{ transform:scale(0.99); }
+
   /* ==================== santuário: filme/série preferido ==================== */
   .shrine{ margin:0 4px 16px; padding:12px 14px; border-radius:var(--r-lg); }
   .shrine-label{ font-size:13px; color:var(--text-dim); display:flex; align-items:center; gap:6px; }
@@ -6896,72 +6923,81 @@
 
     el.innerHTML =
       '<div class="handle"></div>' +
-      '<div class="person-hero">' +
+      '<div class="edit-head">' +
         '<button class="close" id="profileClose" aria-label="Fechar">×</button>' +
-        '<div class="avatar-big" id="avatarBigPreview">' + (prof.avatar ? '<img loading="lazy" alt="" src="' + prof.avatar + '">' : displayName().charAt(0).toUpperCase()) + '</div>' +
-        '<div><div class="p-name">' + displayName() + '</div><div class="p-meta">' + session.email + '</div></div>' +
-      '</div>' +
-      '<div class="block">' +
-        '<div class="block-label">Foto de perfil</div>' +
-        '<input type="file" id="avatarFileInput" accept="image/*" style="margin-bottom:10px">' +
-        '<input type="text" id="avatarUrlInput" class="auth-input" placeholder="ou cole o link de uma imagem">' +
-        '<div class="btn-row">' +
-          '<button class="btn ghost" id="btnApplyAvatarUrl" style="flex:1">Usar link</button>' +
-          (prof.avatar ? '<button class="btn ghost" id="btnRemoveAvatar" style="flex:1">Remover foto</button>' : '') +
+        '<div class="avatar-big" id="avatarBigPreview">' +
+          (prof.avatar ? '<img loading="lazy" alt="" src="' + esc(prof.avatar) + '">' : esc(displayName().charAt(0).toUpperCase())) +
+        '</div>' +
+        '<div class="edit-head-info">' +
+          '<div class="edit-title">Editar perfil</div>' +
+          '<div class="edit-sub">' + esc(session.email) + '</div>' +
+          '<div class="edit-photo-actions">' +
+            '<button class="btn ghost" id="btnPickAvatar">' + (prof.avatar ? 'Trocar foto' : 'Adicionar foto') + '</button>' +
+            (prof.avatar ? '<button class="btn ghost" id="btnRemoveAvatar">Remover</button>' : '') +
+          '</div>' +
+          '<button class="link-btn" id="btnAvatarByLink">Usar um link em vez de arquivo</button>' +
+          '<input type="file" id="avatarFileInput" accept="image/*" hidden>' +
+          '<div id="avatarLinkWrap" hidden>' +
+            '<input type="text" id="avatarUrlInput" class="auth-input" placeholder="https://…" style="margin-top:8px">' +
+            '<div class="btn-row"><button class="btn ghost" id="btnApplyAvatarUrl" style="width:100%">Usar este link</button></div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
+
       '<div class="block">' +
-        '<div class="block-label">Banner do perfil</div>' +
-        '<input type="file" id="bannerFileInput" accept="image/*" style="margin-bottom:10px">' +
-        '<input type="text" id="bannerUrlInput" class="auth-input" placeholder="ou cole o link de uma imagem">' +
-        '<div class="btn-row">' +
-          '<button class="btn ghost" id="btnApplyBannerUrl" style="flex:1">Usar link</button>' +
-          (prof.banner ? '<button class="btn ghost" id="btnRemoveBanner" style="flex:1">Remover banner</button>' : '') +
+        '<div class="block-label">Perfil</div>' +
+        '<div class="field"><label for="profileNameInput">Nome</label>' +
+        '<input type="text" id="profileNameInput" class="auth-input" placeholder="Como quer ser chamado" value="' + esc(prof.fullName||"") + '" maxlength="40"></div>' +
+        '<div class="field"><label for="usernameInput">Nome de usuário</label>' +
+        '<input type="text" id="usernameInput" class="auth-input" placeholder="seuusuario" maxlength="20" value="' + esc(prof.username||"") + '">' +
+        '<div id="usernameStatus" class="username-status"></div></div>' +
+        '<div class="field"><label for="bioInput">Bio</label>' +
+        '<textarea class="comment-input" id="bioInput" placeholder="Fale um pouco sobre você" maxlength="200">' + esc(prof.bio||"") + '</textarea></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label for="locationInput">Localização</label>' +
+          '<input type="text" id="locationInput" class="auth-input" placeholder="Cidade, país" value="' + esc(prof.location||"") + '"></div>' +
+          '<div class="field"><label for="websiteInput">Site</label>' +
+          '<input type="text" id="websiteInput" class="auth-input" placeholder="https://…" value="' + esc(prof.website||"") + '"></div>' +
         '</div>' +
+        '<div class="field"><label>Redes sociais</label><div id="socialRowsWrap"></div>' +
+        '<button class="link-btn" id="btnAddSocial">Adicionar rede social</button></div>' +
+        '<div class="hint">A capa do seu perfil vem do filme ou série que você marca como preferido, lá no perfil.</div>' +
+        '<div class="btn-row" style="margin-top:12px"><button class="btn primary" id="btnSaveProfileInfo" style="width:100%">Salvar</button></div>' +
+        '<div id="profileStatus"></div>' +
       '</div>' +
+
       '<div class="block">' +
-        '<div class="block-label">Nome</div>' +
-        '<input type="text" id="profileNameInput" class="auth-input" placeholder="Como quer ser chamado" value="' + (prof.fullName||"").replace(/"/g,'') + '" maxlength="40">' +
-        '<div class="block-label" style="margin-top:14px">Nome de usuário</div>' +
-        '<input type="text" id="usernameInput" class="auth-input" placeholder="@seuusuario" maxlength="20" value="' + (prof.username||"").replace(/"/g,'') + '">' +
-        '<div id="usernameStatus" class="username-status"></div>' +
-        '<div class="block-label" style="margin-top:14px">Bio</div>' +
-        '<textarea class="comment-input" id="bioInput" placeholder="Fale um pouco sobre você">' + (prof.bio||"") + '</textarea>' +
-        '<div class="block-label">Localização</div>' +
-        '<input type="text" id="locationInput" class="auth-input" placeholder="Cidade, país" value="' + (prof.location||"").replace(/"/g,'') + '">' +
-        '<div class="block-label" style="margin-top:14px">Site</div>' +
-        '<input type="text" id="websiteInput" class="auth-input" placeholder="https://…" value="' + (prof.website||"").replace(/"/g,'') + '">' +
+        '<div class="block-label">Conta</div>' +
+        '<button class="row-btn" id="btnTogglePass"><span>Alterar senha</span>' + icon("chevron_right") + '</button>' +
+        '<div id="passWrap" hidden>' +
+          '<input type="password" id="newPassInput" class="auth-input" placeholder="Nova senha (mín. 6 caracteres)">' +
+          '<input type="password" id="newPassInput2" class="auth-input" placeholder="Confirmar nova senha">' +
+          '<div class="btn-row"><button class="btn primary" id="btnSavePass" style="width:100%">Salvar nova senha</button></div>' +
+        '</div>' +
+        '<button class="row-btn" id="btnGoImport"><span>Importar do Letterboxd ou backup</span>' + icon("chevron_right") + '</button>' +
+        '<button class="row-btn" id="btnSwitchProfile"><span>Sair da conta</span>' + icon("logout") + '</button>' +
       '</div>' +
-      '<div class="block">' +
-        '<div class="block-label">Redes sociais</div>' +
-        '<div id="socialRowsWrap"></div>' +
-        '<div class="btn-row"><button class="btn ghost" id="btnAddSocial" style="width:100%">+ Adicionar rede social</button></div>' +
-      '</div>' +
-      '<div class="block">' +
-        '<div class="btn-row"><button class="btn primary" id="btnSaveProfileInfo" style="width:100%">Salvar perfil</button></div>' +
-      '</div>' +
-      '<div class="block">' +
-        '<div class="block-label">Alterar senha</div>' +
-        '<input type="password" id="newPassInput" class="auth-input" placeholder="Nova senha (mín. 6 caracteres)">' +
-        '<input type="password" id="newPassInput2" class="auth-input" placeholder="Confirmar nova senha">' +
-        '<div class="btn-row"><button class="btn primary" id="btnSavePass" style="width:100%">Salvar nova senha</button></div>' +
-      '</div>' +
-      '<div class="block">' +
-        '<div class="block-label">Dados</div>' +
-        '<div class="btn-row"><button class="btn ghost" id="btnGoImport" style="width:100%">Importar do Letterboxd / backup</button></div>' +
-      '</div>' +
-      '<div id="profileStatus"></div>' +
+
       '<div class="block">' +
         '<div class="block-label">Zona de risco</div>' +
-        '<div class="imdb-note" style="margin-bottom:10px">Isso apaga diário, lista, favoritos e dados de perfil desta conta — mas não exclui a conta em si. Para excluir a conta (e-mail/senha) por completo, use o painel do seu projeto Supabase (Authentication → Users), já que isso exige permissões que o app não tem no navegador.</div>' +
-        '<div class="btn-row"><button class="btn danger" id="btnDeleteProfile" style="width:100%">Apagar todos os meus dados</button></div>' +
-      '</div>' +
-      '<div class="block">' +
-        '<div class="btn-row"><button class="btn ghost" id="btnSwitchProfile" style="width:100%">Sair</button></div>' +
+        '<div class="hint" style="margin-top:0">Apaga diário, lista, favoritos e dados deste perfil. A conta em si continua existindo.</div>' +
+        '<div class="btn-row" style="margin-top:10px"><button class="btn danger" id="btnDeleteProfile" style="width:100%">Apagar todos os meus dados</button></div>' +
       '</div>';
 
     renderSocialRows();
     document.getElementById("profileClose").addEventListener("click", closeProfilePanel);
+
+    document.getElementById("btnPickAvatar").addEventListener("click", () => document.getElementById("avatarFileInput").click());
+    document.getElementById("btnAvatarByLink").addEventListener("click", () => {
+      const w = document.getElementById("avatarLinkWrap");
+      w.hidden = !w.hidden;
+      if(!w.hidden) document.getElementById("avatarUrlInput").focus();
+    });
+    document.getElementById("btnTogglePass").addEventListener("click", () => {
+      const w = document.getElementById("passWrap");
+      w.hidden = !w.hidden;
+      if(!w.hidden) document.getElementById("newPassInput").focus();
+    });
 
     document.getElementById("avatarFileInput").addEventListener("change", async (e) => {
       const file = e.target.files[0];
@@ -6973,7 +7009,6 @@
         syncPublicProfile();
         refreshAvatarUI();
         renderProfilePanel();
-        document.getElementById("profileStatus").innerHTML = profileStatusHTML("Foto atualizada.", false);
         toast("Foto de perfil atualizada");
       }catch(err){
         document.getElementById("profileStatus").innerHTML = profileStatusHTML("Não foi possível usar essa imagem.", true);
@@ -6981,13 +7016,16 @@
     });
     document.getElementById("btnApplyAvatarUrl").addEventListener("click", async () => {
       const val = document.getElementById("avatarUrlInput").value.trim();
-      if(!val || val.indexOf("http") !== 0) return;
+      if(!val || val.indexOf("http") !== 0){
+        document.getElementById("profileStatus").innerHTML = profileStatusHTML("Cole um link que comece com http.", true);
+        return;
+      }
       state.profile.avatar = val;
       await saveState();
       syncPublicProfile();
       refreshAvatarUI();
       renderProfilePanel();
-      document.getElementById("profileStatus").innerHTML = profileStatusHTML("Foto atualizada.", false);
+      toast("Foto de perfil atualizada");
     });
     const rmAvatarBtn = document.getElementById("btnRemoveAvatar");
     if(rmAvatarBtn){
@@ -6996,36 +7034,6 @@
         await saveState();
         syncPublicProfile();
         refreshAvatarUI();
-        renderProfilePanel();
-      });
-    }
-
-    document.getElementById("bannerFileInput").addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if(!file) return;
-      try{
-        const dataUrl = await resizeImageFile(file, 800);
-        state.profile.banner = dataUrl;
-        await saveState();
-        renderProfilePanel();
-        document.getElementById("profileStatus").innerHTML = profileStatusHTML("Banner atualizado.", false);
-      }catch(err){
-        document.getElementById("profileStatus").innerHTML = profileStatusHTML("Não foi possível usar essa imagem.", true);
-      }
-    });
-    document.getElementById("btnApplyBannerUrl").addEventListener("click", async () => {
-      const val = document.getElementById("bannerUrlInput").value.trim();
-      if(!val || val.indexOf("http") !== 0) return;
-      state.profile.banner = val;
-      await saveState();
-      renderProfilePanel();
-      document.getElementById("profileStatus").innerHTML = profileStatusHTML("Banner atualizado.", false);
-    });
-    const rmBannerBtn = document.getElementById("btnRemoveBanner");
-    if(rmBannerBtn){
-      rmBannerBtn.addEventListener("click", async () => {
-        state.profile.banner = null;
-        await saveState();
         renderProfilePanel();
       });
     }
@@ -7066,7 +7074,7 @@
       await saveState();
       syncPublicProfile();
       refreshAvatarUI();
-      document.getElementById("profileStatus").innerHTML = profileStatusHTML("Perfil salvo.", false);
+      document.getElementById("profileStatus").innerHTML = "";
       toast("Perfil salvo");
       const nameEl = el.querySelector(".p-name");
       if(nameEl) nameEl.textContent = displayName();
