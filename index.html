@@ -710,7 +710,12 @@
     position:relative; border-radius:var(--r-lg); overflow:hidden;
     margin:0 4px 16px; padding:0 20px 18px;
   }
+  .profile-banner.from-shrine::after{
+    content:""; position:absolute; inset:0;
+    background:linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.55));
+  }
   .profile-banner{
+    position:relative;
     height:148px; margin:0 -20px 0;
     background:linear-gradient(135deg, var(--accent), var(--accent-2));
     background-size:cover; background-position:center;
@@ -2051,6 +2056,34 @@
     background:var(--fill-1); color:var(--text); font-family:var(--font-body); font-size:13px; font-weight:600;
   }
 
+  /* ==================== santuário: filme/série preferido ==================== */
+  .shrine{ margin:0 4px 16px; padding:12px 14px; border-radius:var(--r-lg); }
+  .shrine-label{ font-size:13px; color:var(--text-dim); display:flex; align-items:center; gap:6px; }
+  .shrine-row{ display:flex; gap:12px; align-items:flex-start; margin-top:10px; }
+  .shrine-poster{
+    width:52px; flex:0 0 52px; aspect-ratio:2/3; border-radius:var(--r-sm); overflow:hidden;
+    background:var(--fill-2); cursor:pointer;
+  }
+  .shrine-poster img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .shrine-info{ flex:1; min-width:0; }
+  .shrine-title{ font-weight:700; font-size:15px; letter-spacing:-0.01em; }
+  .shrine-title span{ color:var(--text-dim); font-weight:500; }
+  .shrine-stars{ display:flex; gap:2px; margin:3px 0 5px; }
+  .shrine-stars svg{ width:13px; height:13px; }
+  .shrine-review{
+    font-size:13.5px; color:var(--text-dim); line-height:1.45;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .shrine-empty{ font-size:13.5px; color:var(--text-dim); line-height:1.45; margin-top:6px; }
+  .shrine-pick{ display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height:280px; overflow-y:auto; }
+  .shrine-opt{
+    display:flex; align-items:center; gap:10px; padding:8px; border-radius:var(--r-md);
+    background:var(--fill-2); border:none; cursor:pointer; text-align:left; color:var(--text); font-family:var(--font-body);
+  }
+  .shrine-opt img, .shrine-opt .noimg{ width:34px; height:51px; border-radius:6px; object-fit:cover; flex-shrink:0; background:var(--fill-1); }
+  .shrine-opt b{ font-size:14px; font-weight:600; display:block; }
+  .shrine-opt span{ font-size:12px; color:var(--text-dim); }
+
   /* ==================== painel de administração ==================== */
   #adminApp{ display:none; }
   #adminApp.show{ display:block; }
@@ -2390,6 +2423,8 @@
           <div class="profile-badges-row" id="profileBadgesRowEl"></div>
         </div>
       </div>
+
+      <div id="profileShrine"></div>
 
       <div class="profile-subtabs glass" id="profileSubtabs">
         <button class="subtab-btn active" data-sub="stats">Stats</button>
@@ -3926,14 +3961,21 @@
   async function syncPublicProfile(){
     if(!session || !sb) return;
     try{
-      await sb.from("profiles").upsert({
+      const base = {
         id: session.id,
         username: state.profile.username || null,
         full_name: state.profile.fullName || null,
         avatar: state.profile.avatar || null,
         bio: state.profile.bio || null,
         updated_at: new Date().toISOString()
-      });
+      };
+      const comShrine = Object.assign({}, base, { shrine: shrineData() || state.profile.shrine || null });
+      let { error } = await sb.from("profiles").upsert(comShrine);
+      if(error && /shrine/i.test(error.message || "")){
+        /* coluna shrine ainda não criada: salva o resto */
+        ({ error } = await sb.from("profiles").upsert(base));
+      }
+      if(error) throw error;
     }catch(e){ console.warn("Não foi possível sincronizar o perfil público:", e); }
   }
 
@@ -6589,6 +6631,138 @@
     '</div>';
   }
 
+
+  /* ==================== SANTUÁRIO: FILME OU SÉRIE PREFERIDO ====================
+     O título escolhido vira a capa do perfil: o STUB busca a imagem de fundo
+     (backdrop) do TMDB e usa como fundo do cabeçalho. A faixa mostra o pôster
+     pequeno, as estrelas e a crítica que a pessoa escreveu no diário. */
+  function shrineData(){
+    const sh = state.profile && state.profile.shrine;
+    if(!sh || !sh.id) return null;
+    const isTv = sh.mediaType === "tv";
+    /* nota e crítica vêm do diário, então acompanham qualquer mudança */
+    const entry = isTv
+      ? srEntries().find(e => srSameId(e.id, sh.id))
+      : state.watched.find(m => m.id == sh.id && (m.mediaType || "movie") === "movie");
+    return {
+      ...sh,
+      rating: entry ? (entry.rating || 0) : (sh.rating || 0),
+      review: entry ? ((isTv ? entry.review : entry.comment) || "") : (sh.review || ""),
+      year: (entry && entry.year) || sh.year || ""
+    };
+  }
+
+  function renderShrine(){
+    const el = document.getElementById("profileShrine");
+    if(!el) return;
+    const sh = shrineData();
+    if(!sh){
+      el.innerHTML = '<div class="shrine glass">' +
+        '<div class="shrine-label">' + icon("favorite") + ' Filme ou série preferido</div>' +
+        '<div class="shrine-empty">Escolha um título do seu diário: ele vira a capa do seu perfil, com a sua nota e a sua crítica.</div>' +
+        '<div class="btn-row" style="margin-top:10px"><button class="btn ghost" id="btnPickShrine" style="width:100%">Escolher preferido</button></div>' +
+        '</div>';
+    }else{
+      el.innerHTML = '<div class="shrine glass">' +
+        '<div class="shrine-label">' + icon("favorite") + ' Filme ou série preferido</div>' +
+        '<div class="shrine-row">' +
+          '<div class="shrine-poster" id="shrineOpen">' +
+            (sh.poster_path ? '<img loading="lazy" alt="" src="' + IMG + esc(sh.poster_path) + '">' : '') +
+          '</div>' +
+          '<div class="shrine-info">' +
+            '<div class="shrine-title">' + esc(sh.title || "") + (sh.year ? ' <span>' + esc(String(sh.year)) + '</span>' : '') + '</div>' +
+            (sh.rating ? '<div class="shrine-stars">' + starsInline(sh.rating) + '</div>' : '') +
+            (sh.review ? '<div class="shrine-review">' + esc(sh.review) + '</div>'
+                       : '<div class="shrine-review">Sem crítica ainda — escreva uma no diário e ela aparece aqui.</div>') +
+          '</div>' +
+        '</div>' +
+        '<div class="btn-row" style="margin-top:10px">' +
+          '<button class="btn ghost" id="btnPickShrine" style="flex:1">Trocar</button>' +
+          '<button class="btn ghost" id="btnClearShrine" style="flex:1">Remover</button>' +
+        '</div>' +
+      '</div>';
+      const abrir = document.getElementById("shrineOpen");
+      if(abrir) abrir.addEventListener("click", () => {
+        if(sh.mediaType === "tv") srOpenSeriesModal(sh.id, { title: sh.title, poster_path: sh.poster_path });
+        else openModalFromSearch({ id: sh.id, title: sh.title, poster_path: sh.poster_path, release_date: String(sh.year || "") });
+      });
+      document.getElementById("btnClearShrine").addEventListener("click", async () => {
+        state.profile.shrine = null;
+        await saveState(); syncPublicProfile();
+        renderProfileHeader();
+      });
+    }
+    document.getElementById("btnPickShrine").addEventListener("click", renderShrinePicker);
+  }
+
+  /* escolha entre os títulos do próprio diário */
+  function renderShrinePicker(){
+    const el = document.getElementById("profileShrine");
+    const filmes = state.watched.filter(m => (m.mediaType || "movie") === "movie")
+      .map(m => ({ id: m.id, mediaType: "movie", title: m.title, year: m.year, poster_path: m.poster_path, rating: m.rating || 0 }));
+    const series = srEntries().map(e => ({ id: e.id, mediaType: "tv", title: e.title, year: e.year, poster_path: e.poster_path, rating: e.rating || 0 }));
+    const todos = [...filmes, ...series].sort((a,b) => (b.rating - a.rating) || String(a.title).localeCompare(String(b.title), "pt-BR"));
+    if(!todos.length){
+      el.innerHTML = '<div class="shrine glass"><div class="shrine-label">' + icon("favorite") + ' Filme ou série preferido</div>' +
+        '<div class="shrine-empty">Seu diário está vazio. Registre um filme ou uma série primeiro.</div>' +
+        '<div class="btn-row" style="margin-top:10px"><button class="btn ghost" id="btnShrineBack" style="width:100%">Voltar</button></div></div>';
+      document.getElementById("btnShrineBack").addEventListener("click", renderShrine);
+      return;
+    }
+    const linha = (t) => '<button class="shrine-opt" data-shrine="' + esc(String(t.id)) + '" data-media="' + t.mediaType + '">' +
+      (t.poster_path ? '<img loading="lazy" alt="" src="' + IMG + esc(t.poster_path) + '">' : '<div class="noimg"></div>') +
+      '<div><b>' + esc(t.title || "") + '</b><span>' + (t.year ? esc(String(t.year)) + ' · ' : '') +
+        (t.mediaType === "tv" ? 'Série' : 'Filme') + (t.rating ? ' · ' + t.rating + '★' : '') + '</span></div>' +
+    '</button>';
+    el.innerHTML = '<div class="shrine glass">' +
+      '<div class="shrine-label">' + icon("favorite") + ' Escolher preferido</div>' +
+      '<div class="search-box" style="margin:10px 0 0"><input type="text" id="shrineSearch" placeholder="Filtrar seu diário…" autocomplete="off"></div>' +
+      '<div class="shrine-pick" id="shrineList">' + todos.slice(0, 40).map(linha).join("") + '</div>' +
+      '<div class="btn-row" style="margin-top:10px"><button class="btn ghost" id="btnShrineBack" style="width:100%">Cancelar</button></div>' +
+    '</div>';
+    const wire = () => el.querySelectorAll("[data-shrine]").forEach(b => b.addEventListener("click", () => {
+      const t = todos.find(x => String(x.id) === b.dataset.shrine && x.mediaType === b.dataset.media);
+      if(t) pickShrine(t);
+    }));
+    wire();
+    document.getElementById("btnShrineBack").addEventListener("click", renderShrine);
+    const busca = document.getElementById("shrineSearch");
+    busca.addEventListener("input", () => {
+      const q = busca.value.trim().toLowerCase();
+      const lista = todos.filter(t => !q || String(t.title).toLowerCase().includes(q)).slice(0, 40);
+      document.getElementById("shrineList").innerHTML = lista.length ? lista.map(linha).join("") : '<div class="shrine-empty">Nada com esse nome.</div>';
+      wire();
+    });
+  }
+
+  /* guarda a escolha e busca no TMDB a imagem de fundo que vira a capa do perfil */
+  async function pickShrine(t){
+    const el = document.getElementById("profileShrine");
+    el.innerHTML = '<div class="shrine glass"><div class="shrine-empty">Preparando a capa…</div></div>';
+    let backdrop = null;
+    if(hasToken){
+      try{
+        const full = await tmdb("/" + (t.mediaType === "tv" ? "tv" : "movie") + "/" + t.id, { language: "pt-BR" });
+        backdrop = full.backdrop_path || null;
+        if(!t.poster_path) t.poster_path = full.poster_path || null;
+        if(!t.year) t.year = ((full.release_date || full.first_air_date || "") + "").slice(0, 4);
+      }catch(e){ console.warn("Não foi possível buscar a imagem de fundo:", e); }
+    }
+    state.profile.shrine = {
+      id: t.id, mediaType: t.mediaType, title: t.title, year: t.year || "",
+      poster_path: t.poster_path || null, backdrop_path: backdrop
+    };
+    try{
+      await saveState();
+      syncPublicProfile();
+      toast(backdrop ? "Capa do perfil atualizada" : "Preferido salvo (esse título não tem imagem de fundo no TMDB)");
+    }catch(e){
+      console.error("Falha ao salvar o preferido:", e);
+      toast("Não foi possível salvar agora", "err");
+    }
+    renderProfileHeader();
+  }
+
   async function renderProfileHeader(){
     const prof = state.profile || defaultProfileInfo();
     const name = displayName();
@@ -6603,7 +6777,12 @@
     const avatarBig = document.getElementById("profileAvatarBig");
     avatarBig.innerHTML = prof.avatar ? ('<img alt="" src="' + prof.avatar + '">') : name.charAt(0).toUpperCase();
 
-    document.getElementById("profileBannerBg").style.backgroundImage = prof.banner ? ("url('" + prof.banner + "')") : "";
+    const sh = prof.shrine;
+    const capa = prof.banner ? prof.banner
+      : (sh && sh.backdrop_path ? BACKDROP_IMG + sh.backdrop_path : null);
+    const bannerEl = document.getElementById("profileBannerBg");
+    bannerEl.style.backgroundImage = capa ? ("url('" + capa + "')") : "";
+    bannerEl.classList.toggle("from-shrine", !prof.banner && !!(sh && sh.backdrop_path));
 
     const movieCount = state.watched.filter(m => (m.mediaType||"movie") === "movie").length;
     const tvCount = (state.series && state.series.entries) ? state.series.entries.length : 0;   // FASE 5: conta do módulo
@@ -6627,6 +6806,7 @@
     await checkAdmin();
     document.getElementById("btnOpenEditBadges").style.display = isAdmin() ? "" : "none";
     renderProfileBadges();
+    renderShrine();
   }
 
   document.getElementById("btnOpenEditProfile").addEventListener("click", openProfilePanel);
@@ -9325,13 +9505,32 @@
     const el = document.getElementById("publicProfileContent");
     const label = prof.full_name || prof.username || "Usuário";
     const tagsHTML = (publicTags || []).map(tagChipHTML).join("");
+    /* preferido da pessoa: vira a capa do perfil e ganha a faixa com pôster, estrelas e crítica */
+    const ppShrine = (prof.shrine && prof.shrine.id) ? prof.shrine : null;
+    const ppCapa = ppShrine && ppShrine.backdrop_path ? BACKDROP_IMG + ppShrine.backdrop_path : null;
+    const ppShrineHTML = ppShrine ? (
+      '<div class="shrine glass" style="margin:0 0 14px">' +
+        '<div class="shrine-label">' + icon("favorite") + ' Filme ou série preferido</div>' +
+        '<div class="shrine-row">' +
+          '<div class="shrine-poster" data-pp-shrine="1">' +
+            (ppShrine.poster_path ? '<img loading="lazy" alt="" src="' + IMG + esc(ppShrine.poster_path) + '">' : '') +
+          '</div>' +
+          '<div class="shrine-info">' +
+            '<div class="shrine-title">' + esc(ppShrine.title || "") + (ppShrine.year ? ' <span>' + esc(String(ppShrine.year)) + '</span>' : '') + '</div>' +
+            (ppShrine.rating ? '<div class="shrine-stars">' + starsInline(ppShrine.rating) + '</div>' : '') +
+            (ppShrine.review ? '<div class="shrine-review">' + esc(ppShrine.review) + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    ) : "";
     const isFollowing = followingIds.has(prof.id);
     const shownBadges = badgeKeys.map(k => badgeByKey(k)).filter(Boolean);
     topTags = topTags || [];
 
     el.innerHTML =
       '<div class="handle"></div>' +
-      '<div class="profile-banner" style="margin:0 0 -34px; border-radius:var(--r-lg) var(--r-lg) 0 0"></div>' +
+      '<div class="profile-banner' + (ppCapa ? ' from-shrine' : '') + '" style="margin:0 0 -34px; border-radius:var(--r-lg) var(--r-lg) 0 0' +
+        (ppCapa ? "; background-image:url('" + esc(ppCapa) + "')" : "") + '"></div>' +
       '<div class="hero" style="padding-bottom:6px">' +
         '<button class="close" id="ppClose" aria-label="Fechar">×</button>' +
         '<div class="mini-avatar" style="width:64px;height:64px;font-size:24px;flex-shrink:0;border:3px solid var(--glass)">' +
@@ -9349,6 +9548,7 @@
             (isFollowing ? 'Seguindo' : 'Seguir') + '</button>' +
         '</div>' +
       '</div>' +
+      ppShrineHTML +
       compatBlockHTML(compat, label) +
       (shownBadges.length ? (
         '<div class="block">' +
@@ -9394,6 +9594,12 @@
 
     document.getElementById("ppClose").addEventListener("click", closePublicProfile);
     wireFollowButtons(el);
+    const ppSh = el.querySelector("[data-pp-shrine]");
+    if(ppSh && ppShrine) ppSh.addEventListener("click", () => {
+      closePublicProfile();
+      if(ppShrine.mediaType === "tv") srOpenSeriesModal(ppShrine.id, { title: ppShrine.title, poster_path: ppShrine.poster_path });
+      else openModalFromSearch({ id: ppShrine.id, title: ppShrine.title, poster_path: ppShrine.poster_path, release_date: String(ppShrine.year || "") });
+    });
     el.querySelectorAll("[data-compat-id]").forEach(card => {
       card.addEventListener("click", () => {
         closePublicProfile();
