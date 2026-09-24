@@ -724,7 +724,7 @@
   .profile-body{ display:flex; flex-direction:column; }
   .profile-topline{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
   .profile-identity-text{ min-width:0; margin-top:10px; }
-  .profile-avatar-ring{ margin-top:-44px; flex:0 0 auto; z-index: 80; }
+  .profile-avatar-ring{ margin-top:-44px; flex:0 0 auto; }
   .profile-avatar-big{
     width:88px; height:88px; border-radius:50%; overflow:hidden;
     border:4px solid var(--glass);
@@ -1514,6 +1514,59 @@
     font-family:var(--font-display); font-size:17px; font-weight:700; letter-spacing:-0.02em;
     text-transform:none; color:var(--text); margin-bottom:10px;
   }
+
+  /* a página de perfil de outra pessoa usa o mesmo desenho do painel */
+  #view-user .handle{
+    width:36px; height:4px;
+    background:var(--glass-border);
+    border-radius:var(--r-pill);
+    margin:10px auto 4px;
+  }
+  #view-user .hero{ position:relative; display:flex; padding:16px 20px 18px; gap:14px; }
+  #view-user .hero > img{
+    width:96px; aspect-ratio:2/3; object-fit:cover;
+    border-radius:var(--r-sm);
+    border:1px solid var(--glass-border-soft);
+    flex-shrink:0;
+  }
+  #view-user .hero > .no-img{
+    width:96px; aspect-ratio:2/3; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--glass);
+    border-radius:var(--r-sm);
+    font-family:var(--font-display); font-weight:500; font-size:11px;
+    color:var(--text-dim); text-align:center; padding:6px;
+  }
+  #view-user .hero .h-info{ min-width:0; padding-top:2px; }
+  #view-user .hero .h-title{
+    font-family:var(--font-display); font-weight:900; font-size:19px;
+    line-height:1.2; margin-bottom:6px;
+  }
+  #view-user .hero .h-meta{
+    font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim);
+    line-height:1.8;
+  }
+  #view-user .close{
+    position:absolute; top:16px; right:18px;
+    width:30px; height:30px;
+    border:1px solid var(--glass-border-soft);
+    background:var(--glass);
+    border-radius:50%;
+    color:var(--text-dim);
+    font-size:16px; cursor:pointer;
+  }
+  #view-user .overview{
+    margin:0 20px 4px;
+    padding:16px 18px;
+    border-radius:var(--r-md);
+    font-size:13.5px; line-height:1.7;
+    color:var(--text);
+  }
+  #view-user .block{ padding:18px 20px 4px; }
+  #view-user .block-label{
+    font-family:var(--font-display); font-size:17px; font-weight:700; letter-spacing:-0.02em;
+    text-transform:none; color:var(--text); margin-bottom:10px;
+  }
   .rate-row{ display:flex; gap:8px; margin-bottom:16px; }
   .rate-row button{ background:none; border:none; padding:2px; cursor:pointer; }
   .rate-row svg{ width:26px; height:26px; }
@@ -1808,7 +1861,6 @@
   #collectionOverlay{ z-index:76; }
   #fixMatchOverlay{ z-index:70; }
   #personOverlay{ z-index:65; }
-  #publicProfileOverlay{ z-index:75; }
   #userSearchOverlay{ z-index:72; }
   #notifOverlay{ z-index:74; }
   #surpriseOverlay{ z-index:76; }
@@ -2055,6 +2107,17 @@
     padding:7px 12px; border-radius:var(--r-pill); border:none; cursor:pointer;
     background:var(--fill-1); color:var(--text); font-family:var(--font-body); font-size:13px; font-weight:600;
   }
+
+  /* ==================== perfil de outra pessoa (página) ==================== */
+  #view-user .user-page-top{ display:flex; align-items:center; margin:0 0 10px; }
+  #view-user .profile-banner{ margin:0 -16px; border-radius:var(--r-lg) var(--r-lg) 0 0; z-index:0; }
+  #view-user .hero, #view-user .hero > *{ position:relative; z-index:1; }
+  #view-user .hero{ padding-top:0; }
+  .ud-has-review{
+    position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%;
+    background:rgba(0,0,0,0.65); color:#fff; display:flex; align-items:center; justify-content:center;
+  }
+  .ud-has-review .mi{ font-size:13px; }
 
   /* ==================== editar perfil ==================== */
   .edit-head{ position:relative; display:flex; gap:14px; align-items:flex-start; padding:18px 20px 12px; }
@@ -2554,6 +2617,11 @@
       </div>
     </section>
 
+    <!-- perfil de outra pessoa: página, não pop-up -->
+    <section class="view" id="view-user">
+      <div id="userPageBody"></div>
+    </section>
+
     <section class="view" id="view-achievements">
       <div id="achievementsContent"></div>
     </section>
@@ -2611,10 +2679,6 @@
 
 <div class="modal-overlay" id="badgesOverlay">
   <div class="modal" id="badgesContent"></div>
-</div>
-
-<div class="modal-overlay" id="publicProfileOverlay">
-  <div class="modal" id="publicProfileContent"></div>
 </div>
 
 <div class="modal-overlay" id="userSearchOverlay">
@@ -4363,7 +4427,9 @@
   }
 
   function adminCount(table, filters){
-    let q = sb.from(table).select("id", { count: "exact", head: true });
+    /* "*" conta sem depender de a tabela ter uma coluna "id"
+       (user_achievements, por exemplo, tem chave composta) */
+    let q = sb.from(table).select("*", { count: "exact", head: true });
     (filters || []).forEach(f => { q = q[f[0]](f[1], f[2]); });
     return q.then(r => (r.error ? null : (r.count || 0))).catch(() => null);
   }
@@ -5393,9 +5459,12 @@
     adminChecked = true;
     if(!session || !sb){ isAdminFlag = false; return false; }
     try{
-      const { data, error } = await sb.from("profiles").select("role").eq("id", session.id).maybeSingle();
-      if(error && /role/i.test(error.message || "")) return await checkAdminLegacy();
+      /* pede a linha inteira: se a coluna role ainda não existe, não vira erro 400.
+         Sem a coluna, NINGUÉM é admin: a conta administrativa é marcada de propósito,
+         nunca deduzida por permissão de escrita (isso fazia conta comum cair no painel). */
+      const { data, error } = await sb.from("profiles").select("*").eq("id", session.id).maybeSingle();
       if(error) throw error;
+      if(data && !("role" in data)) console.warn("A coluna profiles.role ainda não existe — rode o SQL da administração.");
       isAdminFlag = !!data && data.role === "admin";
       return isAdminFlag;
     }catch(e){
@@ -5405,22 +5474,6 @@
     }
   }
 
-  /* forma antiga (antes da coluna role): testa se o banco deixa escrever em badge_defs */
-  async function checkAdminLegacy(){
-    try{
-      const probeKey = "__admin_probe__";
-      const { error } = await sb.from("badge_defs").upsert({
-        key: probeKey, icon: "build", name: "probe", kind: "manual", sort_order: 999
-      });
-      if(!error){
-        isAdminFlag = true;
-        await sb.from("badge_defs").delete().eq("key", probeKey);
-      }else{
-        isAdminFlag = false;
-      }
-    }catch(e){ isAdminFlag = false; }
-    return isAdminFlag;
-  }
 
   function isAdmin(){ return isAdminFlag; }
 
@@ -5905,14 +5958,16 @@
   ];
 
   let TAG_DEFS = DEFAULT_TAG_DEFS.map(t => ({ ...t }));
+  let tagTablesOk = false;   /* só grava etiquetas se tag_defs/user_tags existirem no banco */
   let myManualTags = [];
+  let syncTagsBlocked = false;
   let myFollowersCount = null;
 
   async function loadMyFollowersCount(){
     if(!sb || !session) return;
     try{
-      const { count } = await sb.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", session.id);
-      myFollowersCount = count || 0;
+      const { count, error } = await sb.from("follows").select("*", { count: "exact", head: true }).eq("following_id", session.id);
+      myFollowersCount = error ? 0 : (count || 0);
     }catch(e){ myFollowersCount = 0; }
   }
 
@@ -5928,6 +5983,7 @@
         byKey[row.key] = { ...(byKey[row.key] || {}), ...cfg, key: row.key, sort_order: row.sort_order ?? cfg.sort_order ?? 99 };
       });
       TAG_DEFS = Object.values(byKey).sort((a,b) => (a.sort_order||99) - (b.sort_order||99));
+      tagTablesOk = true;
     }catch(e){
       /* sem a tabela, valem as etiquetas padrão do código */
       console.warn("tag_defs indisponível, usando as etiquetas padrão:", e.message || e);
@@ -5986,7 +6042,9 @@
 
   /* guarda as automáticas conquistadas para que apareçam no perfil público */
   async function syncMyAutoTags(earnedKeys){
-    if(!sb || !session) return;
+    /* sem as tabelas de etiquetas (ou sem permissão), as automáticas seguem
+       aparecendo só para você — sem ficar batendo no banco e tomando 403 */
+    if(!sb || !session || !tagTablesOk || syncTagsBlocked) return;
     const autoKeys = TAG_DEFS.filter(d => d.kind === "auto").map(d => d.key);
     const shouldHave = autoKeys.filter(k => earnedKeys.includes(k));
     const has = myManualTags.filter(k => autoKeys.includes(k));
@@ -6001,7 +6059,10 @@
         await sb.from("user_tags").delete().eq("user_id", session.id).eq("tag_key", k);
         myManualTags = myManualTags.filter(x => x !== k);
       }
-    }catch(e){ /* sem a tabela, as automáticas continuam aparecendo só pra você */ }
+    }catch(e){
+      syncTagsBlocked = true;
+      console.warn("Não foi possível registrar suas etiquetas automáticas (confira as políticas de user_tags):", e.message || e);
+    }
   }
 
   function renderRankTags(){
@@ -9388,17 +9449,22 @@
   }
 
   /* ================= PERFIL PÚBLICO (ver perfil de qualquer usuário) ================= */
-  document.getElementById("publicProfileOverlay").addEventListener("click", (e) => {
-    if(e.target.id === "publicProfileOverlay") closePublicProfile();
-  });
-  function closePublicProfile(){ document.getElementById("publicProfileOverlay").classList.remove("show"); }
+  /* de onde a pessoa veio, para o botão voltar levar de volta */
+  let userPageBackView = "timeline";
+  function closePublicProfile(){
+    switchView(userPageBackView === "user" ? "timeline" : userPageBackView);
+  }
 
   let publicProfileCollections = [];
   async function openPublicProfile(userId){
-    if(userId === session.id){ closePublicProfile(); switchView("profile"); return; }
-    const el = document.getElementById("publicProfileContent");
-    el.innerHTML = '<div class="handle"></div><div class="empty" style="padding:60px 14px"><p>Carregando…</p></div>';
-    document.getElementById("publicProfileOverlay").classList.add("show");
+    if(userId === session.id){ switchView("profile"); return; }
+    /* fecha qualquer painel aberto: agora o perfil é uma página do app */
+    document.querySelectorAll(".modal-overlay.show").forEach(o => o.classList.remove("show"));
+    if(state.activeView !== "user") userPageBackView = state.activeView || "timeline";
+    const el = document.getElementById("userPageBody");
+    el.innerHTML = '<div class="empty glass" style="padding:60px 14px"><p>Carregando…</p></div>';
+    switchView("user");
+    window.scrollTo({ top: 0, behavior: "auto" });
     /* garante que sabemos quem você já segue, mesmo sem ter aberto a aba Amigos */
     await loadFollowingIds();
     try{
@@ -9407,13 +9473,13 @@
         sb.from("user_badges").select("badge_key").eq("user_id", userId),
         sb.from("user_achievements").select("badge_key").eq("user_id", userId),
         sb.from("activities").select("*").eq("user_id", userId).order("created_at", { ascending:false }).limit(12),
-        sb.from("ratings").select("id, movie_id, media_type, rating, title, poster_path").eq("user_id", userId)
+        fetchUserRatings(userId)
       ]);
       /* a RLS já filtra: só volta o que é público (ou "amigos", se você o segue) */
       const { data: cols } = await sb.from("lists").select("*").eq("owner_id", userId).order("created_at", { ascending:false });
       publicProfileCollections = cols || [];
       if(!prof){
-        el.innerHTML = '<div class="handle"></div><div class="empty" style="padding:60px 14px"><p>Perfil não encontrado.</p></div>';
+        el.innerHTML = '<div class="empty glass" style="padding:60px 14px"><p>Perfil não encontrado.</p></div>';
         return;
       }
       /* resolve os perfis de quem aparece na atividade recente (não só o próprio dono) */
@@ -9442,7 +9508,7 @@
         if(prof.role === "admin") keys.push("admin");
         publicTags = TAG_DEFS.filter(d => keys.includes(d.key));
       }catch(e){ /* sem a tabela de etiquetas, o perfil aparece sem elas */ }
-      renderPublicProfile(prof, badgeKeys, acts || [], topTags, computeCompatibility(ratings || []), publicTags);
+      renderPublicProfile(prof, badgeKeys, acts || [], topTags, computeCompatibility(ratings || []), publicTags, ratings || []);
     }catch(e){
       el.innerHTML = '<div class="handle"></div><div class="empty" style="padding:60px 14px"><p>Não foi possível abrir esse perfil.</p></div>';
     }
@@ -9509,13 +9575,93 @@
     '</div>';
   }
 
-  function renderPublicProfile(prof, badgeKeys, acts, topTags, compat, publicTags){
-    const el = document.getElementById("publicProfileContent");
+  /* Bancos mais antigos podem não ter todas as colunas de ratings (ex.: watched_date).
+     Descobre uma vez qual conjunto funciona e reaproveita, em vez de repetir uma
+     consulta que o servidor recusa toda vez que alguém abre um perfil. */
+  const RATING_COLUMN_SETS = [
+    "id, movie_id, media_type, rating, review, title, poster_path, watched_date",
+    "id, movie_id, media_type, rating, review, title, poster_path",
+    "id, movie_id, media_type, rating, title, poster_path"
+  ];
+  let ratingColumnsOk = null;
+  async function fetchUserRatings(userId){
+    const inicio = ratingColumnsOk === null ? 0 : ratingColumnsOk;
+    for(let i = inicio; i < RATING_COLUMN_SETS.length; i++){
+      const r = await sb.from("ratings").select(RATING_COLUMN_SETS[i]).eq("user_id", userId);
+      if(!r.error){
+        if(ratingColumnsOk === null && i > 0){
+          console.warn("Sua tabela ratings não tem todas as colunas; usando: " + RATING_COLUMN_SETS[i]);
+        }
+        ratingColumnsOk = i;
+        return r;
+      }
+      if(!/column|does not exist|42703/i.test(r.error.message || "")) return r;   /* outro erro: devolve como está */
+    }
+    return { data: [], error: null };
+  }
+
+  /* ---------- diário da pessoa: tudo que ela registrou ou comentou ---------- */
+  let userDiaryFilter = "all";
+  let userDiaryVisible = 18;
+  let userDiaryData = [];
+
+  function userDiaryHTML(ratings, label){
+    userDiaryData = (ratings || []).slice().sort((a,b) => String(b.watched_date || "").localeCompare(String(a.watched_date || "")));
+    if(!userDiaryData.length){
+      return '<div class="block"><div class="block-label">Diário</div>' +
+        '<div class="imdb-note">' + esc(label) + ' ainda não registrou nada por aqui.</div></div>';
+    }
+    return '<div class="block" id="userDiaryBlock">' +
+      '<div class="block-label">Diário</div>' +
+      '<div class="diary-filters" id="userDiaryFilters"></div>' +
+      '<div id="userDiaryGrid"></div>' +
+    '</div>';
+  }
+
+  function renderUserDiary(){
+    const grid = document.getElementById("userDiaryGrid");
+    if(!grid) return;
+    const filmes = userDiaryData.filter(r => (r.media_type || "movie") === "movie");
+    const series = userDiaryData.filter(r => r.media_type === "tv");
+    const chips = [["all", "Tudo", userDiaryData.length], ["movie", "Filmes", filmes.length], ["tv", "Séries", series.length],
+                   ["comment", "Com crítica", userDiaryData.filter(r => (r.review || "").trim()).length]];
+    document.getElementById("userDiaryFilters").innerHTML = chips.filter(c => c[2] > 0).map(([k, l, n]) =>
+      '<button class="diary-filter' + (userDiaryFilter === k ? ' active' : '') + '" data-ud="' + k + '">' + l + ' ' + n + '</button>').join("");
+
+    let lista = userDiaryData;
+    if(userDiaryFilter === "movie") lista = filmes;
+    else if(userDiaryFilter === "tv") lista = series;
+    else if(userDiaryFilter === "comment") lista = userDiaryData.filter(r => (r.review || "").trim());
+
+    const vis = lista.slice(0, userDiaryVisible);
+    grid.innerHTML = '<div class="poster-grid">' + vis.map(r =>
+      '<div class="poster-card glass" data-ud-id="' + esc(String(r.movie_id)) + '" data-ud-media="' + esc(r.media_type || "movie") + '" data-ud-title="' + esc(r.title || "") + '" data-ud-poster="' + esc(r.poster_path || "") + '">' +
+        (r.poster_path ? '<img loading="lazy" alt="" src="' + IMG + esc(r.poster_path) + '">' : '<div class="no-img">' + esc(r.title || "") + '</div>') +
+        (r.media_type === "tv" ? '<span class="type-badge tv">Série</span>' : '') +
+        (r.rating ? '<div class="rating-strip">' + starsInline(r.rating) + '</div>' : '') +
+        ((r.review || "").trim() ? '<div class="ud-has-review" title="Escreveu uma crítica">' + icon("chat_bubble") + '</div>' : '') +
+      '</div>').join("") + '</div>' +
+      (lista.length > vis.length ? '<div class="load-more-row"><button class="btn ghost" id="btnUserDiaryMore">Ver mais</button></div>' : '');
+
+    document.querySelectorAll("#userDiaryFilters [data-ud]").forEach(b => b.addEventListener("click", () => {
+      userDiaryFilter = b.dataset.ud; userDiaryVisible = 18; renderUserDiary();
+    }));
+    grid.querySelectorAll("[data-ud-id]").forEach(card => card.addEventListener("click", () => {
+      const id = parseInt(card.dataset.udId, 10);
+      if(card.dataset.udMedia === "tv") srOpenSeriesModal(id, { title: card.dataset.udTitle, poster_path: card.dataset.udPoster || null });
+      else openModalFromSearch({ id, title: card.dataset.udTitle, poster_path: card.dataset.udPoster || null, release_date: "" });
+    }));
+    const more = document.getElementById("btnUserDiaryMore");
+    if(more) more.addEventListener("click", () => { userDiaryVisible += 18; renderUserDiary(); });
+  }
+
+  function renderPublicProfile(prof, badgeKeys, acts, topTags, compat, publicTags, ratings){
+    const el = document.getElementById("userPageBody");
     const label = prof.full_name || prof.username || "Usuário";
     const tagsHTML = (publicTags || []).map(tagChipHTML).join("");
     /* preferido da pessoa: vira a capa do perfil e ganha a faixa com pôster, estrelas e crítica */
     const ppShrine = (prof.shrine && prof.shrine.id) ? prof.shrine : null;
-    const ppCapa = ppShrine && ppShrine.backdrop_path ? BACKDROP_IMG + ppShrine.backdrop_path : null;
+    const ppCapa = (ppShrine && ppShrine.backdrop_path) ? BACKDROP_IMG + ppShrine.backdrop_path : (safeUrl(prof.banner) || null);
     const ppShrineHTML = ppShrine ? (
       '<div class="shrine glass" style="margin:0 0 14px">' +
         '<div class="shrine-label">' + icon("favorite") + ' Filme ou série preferido</div>' +
@@ -9536,11 +9682,12 @@
     topTags = topTags || [];
 
     el.innerHTML =
-      '<div class="handle"></div>' +
+      '<div class="user-page-top">' +
+        '<button class="icon-btn" id="ppClose" aria-label="Voltar">' + icon("arrow_back") + '</button>' +
+      '</div>' +
       '<div class="profile-banner' + (ppCapa ? ' from-shrine' : '') + '" style="margin:0 0 -34px; border-radius:var(--r-lg) var(--r-lg) 0 0' +
         (ppCapa ? "; background-image:url('" + esc(ppCapa) + "')" : "") + '"></div>' +
       '<div class="hero" style="padding-bottom:6px">' +
-        '<button class="close" id="ppClose" aria-label="Fechar">×</button>' +
         '<div class="mini-avatar" style="width:64px;height:64px;font-size:24px;flex-shrink:0;border:3px solid var(--glass)">' +
           (safeUrl(prof.avatar) ? '<img loading="lazy" alt="" src="' + esc(safeUrl(prof.avatar)) + '">' : esc(label.charAt(0).toUpperCase())) + '</div>' +
         '<div class="h-info">' +
@@ -9557,6 +9704,7 @@
         '</div>' +
       '</div>' +
       ppShrineHTML +
+      userDiaryHTML(ratings, label) +
       compatBlockHTML(compat, label) +
       (shownBadges.length ? (
         '<div class="block">' +
@@ -9602,6 +9750,8 @@
 
     document.getElementById("ppClose").addEventListener("click", closePublicProfile);
     wireFollowButtons(el);
+    userDiaryFilter = "all"; userDiaryVisible = 18;
+    renderUserDiary();
     const ppSh = el.querySelector("[data-pp-shrine]");
     if(ppSh && ppShrine) ppSh.addEventListener("click", () => {
       closePublicProfile();
