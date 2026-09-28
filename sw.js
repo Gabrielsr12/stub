@@ -4,7 +4,7 @@
    fontes, CDN) passa direto pra rede — nunca é interceptado nem cacheado,
    pra não servir dados velhos de filmes ou quebrar login/autenticação. */
 
-const CACHE_VERSION = "stub-shell-v7";   // v7: aba Fórum
+const CACHE_VERSION = "stub-shell-v8";   // v8: conserta placar e curtidas inflando na troca de aba
 const APP_SHELL = [
   "./",
   "./index.html",
