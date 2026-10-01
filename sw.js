@@ -4,7 +4,7 @@
    fontes, CDN) passa direto pra rede — nunca é interceptado nem cacheado,
    pra não servir dados velhos de filmes ou quebrar login/autenticação. */
 
-const CACHE_VERSION = "stub-shell-v11";  // v11: conquistas de título e de conjunto
+const CACHE_VERSION = "stub-shell-v12";  // v12: todos os critérios editáveis no painel
 const APP_SHELL = [
   "./",
   "./index.html",

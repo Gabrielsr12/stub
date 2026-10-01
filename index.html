@@ -3171,11 +3171,6 @@
   }
   .cj-x:hover{ background:var(--danger); color:#fff; }
 
-  /* quatro critérios não cabem lado a lado num celular: duas colunas */
-  .crit-grade{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px; }
-  .crit-grade .btn{ width:100%; padding:11px 8px; font-size:12.5px; gap:6px; }
-  .crit-grade .btn .mi{ font-size:15px; flex:none; }
-
   /* ---------- a lista de títulos dentro do detalhe da conquista ---------- */
   .ach-titulos{ margin-top:18px; width:100%; text-align:left; }
   .ach-titulos .rotulo{
@@ -9299,15 +9294,146 @@
   }
   /* ==================== fim das conquistas de título e conjunto ==================== */
 
+  /* ==================== CRITÉRIOS DE CONQUISTA ====================
+     Tudo que o motor sabe calcular, numa lista só. Antes, metade das
+     condições existia apenas no código e o painel mostrava "configurada
+     só por código" — o que fazia qualquer badge antiga parecer travada.
+     Agora toda condição aparece no seletor, com os campos que ela pede. */
+
+  const CRIT_FILME = [
+    ["Contagem", [
+      ["movies_count",      "Filmes assistidos"],
+      ["comments_count",    "Comentários escritos"],
+      ["rating_count",      "Filmes avaliados"],
+      ["rewatch_count",     "Filmes reassistidos"],
+      ["badge_count",       "Conquistas desbloqueadas"]
+    ]],
+    ["Gênero e tema", [
+      ["genre_count",       "Filmes de um gênero",            "genero"],
+      ["anime_count",       "Animações em japonês"]
+    ]],
+    ["Diversidade", [
+      ["country_diversity", "Países de origem diferentes"],
+      ["genre_diversity",   "Gêneros diferentes"],
+      ["distinct_years",    "Anos de lançamento diferentes"]
+    ]],
+    ["Épocas", [
+      ["before_year",       "Filmes anteriores a um ano",     "ano"],
+      ["decade_coverage",   "Cobrir várias décadas",          "decadas"]
+    ]],
+    ["Hábitos", [
+      ["max_same_day",      "Filmes num mesmo dia"],
+      ["max_weekend",       "Filmes num fim de semana"],
+      ["streak_days",       "Dias seguidos com filme"]
+    ]],
+    ["Notas", [
+      ["rating_exact",      "Filmes com uma nota exata",      "nota"]
+    ]],
+    ["Títulos específicos", [
+      ["title_watches",     "Um filme, várias vezes",         "montador"],
+      ["title_set",         "Conjunto de filmes",             "montador"]
+    ]]
+  ];
+
+  const CRIT_SERIE = [
+    ["Contagem", [
+      ["sr_count",           "Séries no diário"],
+      ["sr_completed_count", "Séries concluídas"],
+      ["sr_abandoned_count", "Séries abandonadas"],
+      ["sr_rating_count",    "Séries avaliadas"],
+      ["sr_review_count",    "Resenhas de série escritas"],
+      ["sr_fav_count",       "Séries favoritas"],
+      ["sr_badge_count",     "Conquistas de série desbloqueadas"]
+    ]],
+    ["Gênero", [
+      ["sr_genre_count",     "Séries de um gênero",           "genero"]
+    ]]
+  ];
+
+  function critLista(escopo){ return escopo === "series" ? CRIT_SERIE : CRIT_FILME; }
+
+  function critAchar(escopo, chave){
+    let achado = null;
+    critLista(escopo).forEach(([, itens]) => itens.forEach(it => { if(it[0] === chave) achado = it; }));
+    return achado;
+  }
+
+  /* qual critério está selecionado para uma badge já existente */
+  function critDaBadge(b, escopo){
+    if(!b) return escopo === "series" ? "sr_count" : "movies_count";
+    if(b.condition){
+      /* nomes antigos salvos no banco */
+      if(b.condition === "series_count") return "sr_count";
+      if(b.condition === "series_completed_count") return "sr_completed_count";
+      if(b.condition === "genre_count" && escopo === "series") return "sr_genre_count";
+      return b.condition;
+    }
+    if(escopo === "series") return b.metric === "series_completed" ? "sr_completed_count" : "sr_count";
+    return b.metric === "comments" ? "comments_count" : "movies_count";
+  }
+
+  function critSeletorHTML(escopo, atual){
+    const grupos = critLista(escopo).map(([nome, itens]) =>
+      '<optgroup label="' + esc(nome) + '">' + itens.map(it =>
+        '<option value="' + esc(it[0]) + '"' + (it[0] === atual ? ' selected' : '') + '>' +
+        esc(it[1]) + '</option>').join("") + '</optgroup>').join("");
+    /* condição que o painel não conhece (ex.: combined, ou alguma futura):
+       entra como opção própria pra não ser trocada sem querer */
+    const conhecida = !!critAchar(escopo, atual);
+    const estranha = conhecida ? "" :
+      '<optgroup label="Avançado"><option value="' + esc(atual) + '" selected>' +
+      'Condição do código (' + esc(atual) + ')</option></optgroup>';
+    return '<select id="bCriterio" class="filter-select">' + estranha + grupos + '</select>';
+  }
+
+  /* campos que cada critério pede além da meta */
+  function critExtraHTML(escopo, chave, b){
+    const it = critAchar(escopo, chave);
+    const campo = it && it[2];
+    if(campo === "genero"){
+      return '<div class="block-label" style="margin-top:10px">Gênero</div>' +
+             '<select id="bGenre" class="filter-select"></select>';
+    }
+    if(campo === "ano"){
+      return '<div class="block-label" style="margin-top:10px">Lançados antes de</div>' +
+             '<input type="number" id="bAno" class="auth-input" min="1900" max="2100" placeholder="1980" value="' +
+             (b && b.year ? esc(String(b.year)) : "") + '">';
+    }
+    if(campo === "nota"){
+      const atual = b && b.rating ? b.rating : 5;
+      return '<div class="block-label" style="margin-top:10px">Qual nota</div>' +
+             '<select id="bNota" class="filter-select">' + [1,2,3,4,5].map(n =>
+               '<option value="' + n + '"' + (n === atual ? ' selected' : '') + '>' +
+               "★".repeat(n) + ' (' + n + ')</option>').join("") + '</select>';
+    }
+    if(campo === "decadas"){
+      return '<div class="block-label" style="margin-top:10px">Faixa de décadas</div>' +
+        '<div class="btn-row" style="gap:8px">' +
+          '<div style="flex:1"><div class="filter-label">De</div>' +
+            '<input type="number" id="bDecDe" class="filter-select" step="10" placeholder="1950" value="' +
+            (b && b.from ? esc(String(b.from)) : "") + '"></div>' +
+          '<div style="flex:1"><div class="filter-label">Até</div>' +
+            '<input type="number" id="bDecAte" class="filter-select" step="10" placeholder="2020" value="' +
+            (b && b.to ? esc(String(b.to)) : "") + '"></div>' +
+          '<div style="flex:1"><div class="filter-label">Por década</div>' +
+            '<input type="number" id="bDecPor" class="filter-select" min="1" placeholder="1" value="' +
+            (b && b.perDecade ? esc(String(b.perDecade)) : "") + '"></div>' +
+        '</div>' +
+        '<div class="imdb-note">A meta é quantas décadas da faixa precisam estar cobertas.</div>';
+    }
+    return "";
+  }
+
+  function critEhMontador(escopo, chave){
+    const it = critAchar(escopo, chave);
+    return !!(it && it[2] === "montador");
+  }
+
   function openBadgeEditor(existingKey){
     const b = existingKey ? badgeByKey(existingKey) : null;
     const isAuto = b ? AUTO_BADGES.some(x => x.key === b.key) : false;
-    /* condições que o painel sabe editar: as outras continuam só por código */
-    const CONDS_EDITAVEIS = ["genre_count", "sr_genre_count", "title_watches", "title_set"];
-    const hasAdvancedCondition = !!(b && b.condition && CONDS_EDITAVEIS.indexOf(b.condition) === -1);
     /* FASE 4: escopo da badge. As 4 antigas de série (e chaves sr_*) são sempre de séries */
     const scopeLocked = !!(b && (SR_LEGACY_BADGE_KEYS.includes(b.key) || String(b.key).indexOf("sr_") === 0));
-    const isGenreCond = !!(b && (b.condition === "genre_count" || b.condition === "sr_genre_count"));
     const el = document.getElementById("badgesContent");
     cjCarregarDe(b);
     el.innerHTML =
@@ -9349,29 +9475,13 @@
                 '<button class="btn ghost' + (badgeScope(b) === "movie" ? ' primary' : '') + '" data-bscope="movie"><svg class="mi" aria-hidden="true"><use href="#i-movie"/></svg> Filmes</button>' +
                 '<button class="btn ghost' + (badgeScope(b) === "series" ? ' primary' : '') + '" data-bscope="series"><svg class="mi" aria-hidden="true"><use href="#i-device-tv"/></svg> Séries</button>' +
               '</div>') +
-          (hasAdvancedCondition && !isGenreCond ? (
-            '<div class="imdb-note" style="margin-top:10px">Esta badge usa uma condição avançada (<code>' + esc(b.condition) + '</code>), configurada só por código. Editar aqui muda apenas a meta abaixo — o critério em si fica preservado.</div>'
-          ) : (
-            '<div class="block-label" style="margin-top:10px">Critério</div>' +
-            '<div class="crit-grade" data-metric-scope="movie"' + (badgeScope(b) === "series" ? ' style="display:none"' : '') + '>' +
-              '<button class="btn ghost' + (b && b.metric === "movies" && !b.condition ? ' primary' : '') + '" data-bmetric="movies">' + icon("movie") + ' Filmes</button>' +
-              '<button class="btn ghost' + (b && b.metric === "comments" ? ' primary' : '') + '" data-bmetric="comments">' + icon("edit") + ' Comentários</button>' +
-              '<button class="btn ghost' + (b && b.condition === "title_watches" ? ' primary' : '') + '" data-bmetric="title_watches">' + icon("repeat") + ' Um filme, X vezes</button>' +
-              '<button class="btn ghost' + (b && b.condition === "title_set" ? ' primary' : '') + '" data-bmetric="title_set">' + icon("library") + ' Conjunto</button>' +
-            '</div>' +
-            '<div class="btn-row" data-metric-scope="series"' + (badgeScope(b) === "series" ? '' : ' style="display:none"') + '>' +
-              '<button class="btn ghost' + (b && b.metric === "series" ? ' primary' : '') + '" data-bmetric="series">Séries no diário</button>' +
-              '<button class="btn ghost' + (b && b.metric === "series_completed" ? ' primary' : '') + '" data-bmetric="series_completed">Séries concluídas</button>' +
-            '</div>'
-          )) +
+          '<div class="block-label" style="margin-top:10px">Critério</div>' +
+          '<div id="bCritHost">' + critSeletorHTML(badgeScope(b), critDaBadge(b, badgeScope(b))) + '</div>' +
+          '<div id="bExtra"></div>' +
           '<div id="bAlvo"></div>' +
           '<div id="bMetaSimples">' +
-          '<div class="block-label" style="margin-top:10px">Meta (número)</div>' +
-          '<input type="number" id="bGoal" class="auth-input" placeholder="100" value="' + (b && b.goal ? b.goal : '') + '">' +
-          (!hasAdvancedCondition || isGenreCond ? (
-            '<div class="block-label" style="margin-top:10px">Gênero (opcional — só conta títulos desse gênero)</div>' +
-            '<select id="bGenre" class="filter-select"></select>'
-          ) : '') +
+            '<div class="block-label" style="margin-top:10px">Meta (número)</div>' +
+            '<input type="number" id="bGoal" class="auth-input" placeholder="100" value="' + (b && b.goal ? b.goal : '') + '">' +
           '</div>' +
           '<div class="block-label" style="margin-top:14px">⏳ Desafio sazonal (opcional)</div>' +
           '<div class="imdb-note" style="margin-top:0">Preencha as datas pra transformar em desafio temporário: só conta o que for assistido dentro do período, e ele some da aba quando acabar (quem conquistou mantém).</div>' +
@@ -9392,8 +9502,9 @@
       '</div>';
 
     let kind = isAuto ? "auto" : "manual";
-    let metric = b ? b.metric : null;
     let scope = badgeScope(b);
+    let criterio = critDaBadge(b, scope);
+
     /* lista de gêneros depende do escopo (filmes x séries) */
     const fillGenreSelect = () => {
       const sel = document.getElementById("bGenre");
@@ -9404,17 +9515,44 @@
       if(prev && !labels.includes(prev)) labels.unshift(prev);
       sel.innerHTML = '<option value="">Qualquer gênero</option>' + labels.map(l => '<option value="' + esc(l) + '"' + (l === prev ? ' selected' : '') + '>' + esc(l) + '</option>').join("");
     };
-    fillGenreSelect();
+
+    /* desenha os campos que o critério escolhido pede e esconde o que não serve */
+    function aplicarCriterio(){
+      const extra = document.getElementById("bExtra");
+      const simples = document.getElementById("bMetaSimples");
+      const alvo = document.getElementById("bAlvo");
+      if(!extra || !alvo) return;
+      const montador = critEhMontador(scope, criterio);
+      extra.innerHTML = montador ? "" : critExtraHTML(scope, criterio, b);
+      fillGenreSelect();
+      if(simples) simples.style.display = montador ? "none" : "";
+      if(montador) cjRedesenhar(criterio, b); else alvo.innerHTML = "";
+    }
+
+    function ligarSeletorCriterio(){
+      const sel = document.getElementById("bCriterio");
+      if(!sel) return;
+      sel.addEventListener("change", () => { criterio = sel.value; aplicarCriterio(); });
+    }
+
+    function redesenharCriterio(){
+      const host = document.getElementById("bCritHost");
+      if(!host) return;
+      host.innerHTML = critSeletorHTML(scope, criterio);
+      ligarSeletorCriterio();
+      aplicarCriterio();
+    }
+
+    ligarSeletorCriterio();
+    aplicarCriterio();
+
     el.querySelectorAll("[data-bscope]").forEach(btn => btn.addEventListener("click", () => {
       if(scope === btn.dataset.bscope) return;
       scope = btn.dataset.bscope;
       el.querySelectorAll("[data-bscope]").forEach(x => x.classList.toggle("primary", x === btn));
-      el.querySelectorAll("[data-metric-scope]").forEach(row => { row.style.display = row.dataset.metricScope === scope ? "" : "none"; });
-      aplicarCriterio();
-      metric = null;
-      el.querySelectorAll("[data-bmetric]").forEach(x => x.classList.remove("primary"));
-      fillGenreSelect();
-      aplicarCriterio();
+      /* trocar de escopo troca a lista inteira de critérios */
+      criterio = scope === "series" ? "sr_count" : "movies_count";
+      redesenharCriterio();
     }));
     let style = b ? (b.style || "") : "";
     let rarity = b ? (b.rarity || "normal") : "normal";
@@ -9427,29 +9565,6 @@
       kind = btn.dataset.bkind;
       el.querySelectorAll("[data-bkind]").forEach(x => x.classList.toggle("primary", x === btn));
       document.getElementById("autoFields").style.display = kind === "auto" ? "block" : "none";
-    }));
-    /* "Um filme" e "Conjunto" não usam meta solta nem gênero: trocam o
-       formulário pelo montador de títulos */
-    const ehDeTitulo = (m) => m === "title_watches" || m === "title_set";
-    function aplicarCriterio(){
-      const simples = document.getElementById("bMetaSimples");
-      const alvo = document.getElementById("bAlvo");
-      if(!alvo) return;
-      if(ehDeTitulo(metric)){
-        if(simples) simples.style.display = "none";
-        cjRedesenhar(metric, b);
-      }else{
-        if(simples) simples.style.display = "";
-        alvo.innerHTML = "";
-      }
-    }
-    if(b && (b.condition === "title_watches" || b.condition === "title_set")) metric = b.condition;
-    aplicarCriterio();
-
-    el.querySelectorAll("[data-bmetric]").forEach(btn => btn.addEventListener("click", () => {
-      metric = btn.dataset.bmetric;
-      el.querySelectorAll("[data-bmetric]").forEach(x => x.classList.toggle("primary", x === btn));
-      aplicarCriterio();
     }));
     el.querySelectorAll("[data-bstyle]").forEach(btn => btn.addEventListener("click", () => {
       style = btn.dataset.bstyle;
@@ -9470,11 +9585,9 @@
       /* FASE 4: badge nova de série sempre ganha o prefixo sr_ (o ranking separa por ele) */
       if(!b && key && scope === "series" && key.indexOf("sr_") !== 0) key = "sr_" + key;
       if(key && scope === "movie" && key.indexOf("sr_") === 0){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Identificadores começando com "sr_" são reservados para badges de séries.</div>'; return; }
-      const validMetrics = scope === "series"
-        ? ["series", "series_completed"]
-        : ["movies", "comments", "title_watches", "title_set"];
-      const ehTitulo = metric === "title_watches" || metric === "title_set";
-      if(kind === "auto" && metric && !validMetrics.includes(metric)) metric = null;
+      const selCrit = document.getElementById("bCriterio");
+      if(selCrit) criterio = selCrit.value;
+      const ehTitulo = critEhMontador(scope, criterio);
       const icon = document.getElementById("bIcon").value.trim();
       const name = document.getElementById("bName").value.trim();
       const desc = document.getElementById("bDesc").value.trim();
@@ -9483,11 +9596,11 @@
       let goal = (kind === "auto" && campoGoal && !ehTitulo) ? parseInt(campoGoal.value, 10) : null;
 
       /* conquistas de título trazem a meta do próprio montador */
-      if(kind === "auto" && metric === "title_watches"){
+      if(kind === "auto" && criterio === "title_watches"){
         if(!cjAlvoFilme){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Escolha o filme da conquista.</div>'; return; }
         goal = Math.max(1, parseInt((document.getElementById("cjVezes") || {}).value, 10) || 1);
       }
-      if(kind === "auto" && metric === "title_set"){
+      if(kind === "auto" && criterio === "title_set"){
         if(cjItens.length < 2){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Um conjunto precisa de pelo menos dois filmes.</div>'; return; }
         const pedido = parseInt((document.getElementById("cjMeta") || {}).value, 10);
         goal = (pedido && pedido > 0) ? Math.min(pedido, cjItens.length) : cjItens.length;
@@ -9497,11 +9610,17 @@
       const startDate = document.getElementById("bStart").value || "";
       const endDate = document.getElementById("bEnd").value || "";
       if(startDate && endDate && endDate < startDate){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">A data de fim precisa ser depois do início.</div>'; return; }
-      if(kind === "auto" && ehTitulo && scope === "series"){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Conquistas de título e de conjunto são só de filmes por enquanto.</div>'; return; }
-      if(kind === "auto" && genre && (metric === "comments" || metric === "series_completed")){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">O filtro de gênero só funciona com o critério "' + (scope === "series" ? 'Séries no diário' : 'Filmes') + '".</div>'; return; }
+      const ehGenero = criterio === "genre_count" || criterio === "sr_genre_count";
+      if(kind === "auto" && ehGenero && !genre){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Escolha o gênero deste critério.</div>'; return; }
       if(!key || !icon || !name){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Preencha identificador, ícone e nome.</div>'; return; }
-      if(kind === "auto" && !hasAdvancedCondition && !ehTitulo && (!metric || !goal)){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Badges automáticas precisam de critério e meta.</div>'; return; }
-      if(kind === "auto" && hasAdvancedCondition && !goal){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Informe a meta.</div>'; return; }
+      if(kind === "auto" && !ehTitulo && !goal){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Informe a meta.</div>'; return; }
+      if(kind === "auto" && criterio === "before_year" && !parseInt((document.getElementById("bAno") || {}).value, 10)){
+        statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Informe o ano de corte.</div>'; return; }
+      if(kind === "auto" && criterio === "decade_coverage"){
+        const de = parseInt((document.getElementById("bDecDe") || {}).value, 10);
+        const ate = parseInt((document.getElementById("bDecAte") || {}).value, 10);
+        if(!de || !ate || ate < de){ statusEl.innerHTML = '<div class="auth-error" style="margin-top:10px">Informe a faixa de décadas (de / até).</div>'; return; }
+      }
       statusEl.innerHTML = '<div class="block-label" style="margin-top:10px">Salvando…</div>';
 
       /* monta a badge completa: parte do que já existia (preserva condition,
@@ -9516,32 +9635,49 @@
       if(kind === "auto"){
         merged.goal = goal;
         if(scope === "series") merged.scope = "series"; else delete merged.scope;
-        if(ehTitulo){
-          /* sai de qualquer resquício de badge de contagem */
-          delete merged.metric; delete merged.genre;
-          delete merged.setItens; delete merged.tituloId;
-          delete merged.tituloNome; delete merged.tituloCapa; delete merged.tituloAno;
-          merged.condition = metric;
-          if(metric === "title_watches"){
-            merged.tituloId = cjAlvoFilme.id;
-            merged.tituloNome = cjAlvoFilme.t || "";
-            merged.tituloCapa = cjAlvoFilme.p || null;
-            merged.tituloAno = cjAlvoFilme.y || "";
-          }else{
-            /* guarda nome e pôster junto: o detalhe mostra o que falta sem
-               precisar consultar o TMDB de novo */
-            merged.setItens = cjItens.map(x => ({ id: x.id, t: x.t || "", p: x.p || null, y: x.y || "" }));
-          }
-        }else if(!hasAdvancedCondition || isGenreCond){
-          if(genre){
-            /* gênero escolhido: vira badge de contagem por gênero (filmes: genre_count · séries: sr_genre_count) */
-            merged.condition = scope === "series" ? "sr_genre_count" : "genre_count";
-            merged.genre = genre;
-            merged.metric = scope === "series" ? "series" : "movies";
-          }else{
-            merged.metric = metric || (scope === "series" ? "series" : "movies"); delete merged.condition; delete merged.genre;
-          }
+
+        /* o critério manda: tudo que pertencia a outro critério sai, pra que
+           trocar de critério não deixe sobras que o motor leria errado */
+        ["metric", "condition", "genre", "year", "rating", "from", "to", "perDecade",
+         "setItens", "setIds", "tituloId", "tituloNome", "tituloCapa", "tituloAno"]
+          .forEach(k => { delete merged[k]; });
+
+        if(criterio === "movies_count")           merged.metric = "movies";
+        else if(criterio === "comments_count")    merged.metric = "comments";
+        else if(criterio === "sr_count")          merged.metric = "series";
+        else if(criterio === "sr_completed_count") merged.metric = "series_completed";
+        else merged.condition = criterio;
+
+        if(criterio === "genre_count" || criterio === "sr_genre_count"){
+          merged.genre = genre;
+          merged.metric = scope === "series" ? "series" : "movies";
         }
+        if(criterio === "before_year") merged.year = parseInt(document.getElementById("bAno").value, 10);
+        if(criterio === "rating_exact") merged.rating = parseInt(document.getElementById("bNota").value, 10);
+        if(criterio === "decade_coverage"){
+          merged.from = parseInt(document.getElementById("bDecDe").value, 10);
+          merged.to = parseInt(document.getElementById("bDecAte").value, 10);
+          const por = parseInt(document.getElementById("bDecPor").value, 10);
+          if(por > 0) merged.perDecade = por;
+        }
+        if(criterio === "title_watches"){
+          merged.tituloId = cjAlvoFilme.id;
+          merged.tituloNome = cjAlvoFilme.t || "";
+          merged.tituloCapa = cjAlvoFilme.p || null;
+          merged.tituloAno = cjAlvoFilme.y || "";
+        }
+        if(criterio === "title_set"){
+          /* guarda nome e pôster junto: o detalhe mostra o que falta sem
+             precisar consultar o TMDB de novo */
+          merged.setItens = cjItens.map(x => ({ id: x.id, t: x.t || "", p: x.p || null, y: x.y || "" }));
+        }
+        /* condição que o painel não conhece (combined e afins): preserva o que
+           a definição original trazia, já que o formulário não sabe editá-la */
+        if(b && b.condition === criterio && !critAchar(scope, criterio)){
+          Object.keys(b).forEach(k => { if(!(k in merged)) merged[k] = b[k]; });
+          merged.condition = criterio;
+        }
+
         if(startDate) merged.startDate = startDate; else delete merged.startDate;
         if(endDate) merged.endDate = endDate; else delete merged.endDate;
       }else{
